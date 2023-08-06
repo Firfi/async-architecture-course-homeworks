@@ -9,7 +9,7 @@ services:
       context: .
       dockerfile: kafka-adapter.Dockerfile
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - KAFKA_BROKERS=kafka:9092
       - HOST=0.0.0.0
@@ -50,11 +50,11 @@ services:
     depends_on:
       fief:
         condition: service_started
-    restart: "no"
+    restart: 'no'
     network_mode: host
     entrypoint:
-      - "/bin/sh"
-      - "-c"
+      - '/bin/sh'
+      - '-c'
       - |
         until curl --output /dev/null --silent --head --fail http://localhost:8000/admin/api/docs; do
           printf '.'
@@ -143,4 +143,3 @@ services:
 volumes:
   kafka_data:
     driver: local
-

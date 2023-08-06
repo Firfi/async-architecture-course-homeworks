@@ -107,17 +107,14 @@ const validateWebhookSignature = (req: Request, payload: string) => {
   }
 
   return true;
-}
+};
 
 app.post('/webhook', async (req, res) => {
-
   let payload = '';
 
   req.on('data', (chunk) => {
     payload += chunk;
   });
-
-
 
   req.on('end', async () => {
     // too involved; I create webhook in docker container thru curl and need to pass its secret somehow; it's too involved

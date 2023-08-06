@@ -17,7 +17,7 @@ export const assertNonEmptyAndAssigned = <T>(
   return x_;
 };
 
-// case Some<T> to T and throw if it's None
+// cast Some<T> to T and throw if it's None
 export const castSome = <T>(x: Option<T>): T => {
   if (x._tag === 'None') {
     throw new Error('Assertion failed');

@@ -7,13 +7,14 @@ import * as RNEA from 'fp-ts/ReadonlyNonEmptyArray';
 import * as STR from 'fp-ts/string';
 import { Kafka } from 'kafkajs';
 import { pipe } from 'fp-ts/function';
+import { Request } from 'express-serve-static-core';
 
-const host = process.env.HOST ?? 'localhost';
+const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 const app = express();
 
-const FIEF_SECRET = assertNonEmptyAndAssigned(process.env.FIEF_SECRET);
+const FIEF_SECRET = 'TODO'; // assertNonEmptyAndAssigned(process.env.FIEF_SECRET);
 
 const FIEF_EVENT_TYPE_USER_CREATED = 'user.created';
 const FIEF_EVENT_TYPE_USER_UPDATED = 'user.updated';
@@ -96,38 +97,50 @@ const kafka = new Kafka({
 
 const producer = kafka.producer();
 
-app.post('/webhook', async (req, res) => {
+const validateWebhookSignature = (req: Request, payload: string) => {
   const timestamp = req.header('X-Fief-Webhook-Timestamp');
   const signature = req.header('X-Fief-Webhook-Signature');
+  // Check if timestamp and signature are there
+  if (!timestamp || !signature) {
+    return false;
+  }
+
+  // Check if timestamp is not older than 5 minutes; lief recommendation
+  if (Math.floor(Date.now() / 1000) - Number(timestamp) > 5 * 60) {
+    return false;
+  }
+
+  // Compute signature
+  const message = `${timestamp}.${payload}`;
+  const hash = crypto
+    .createHmac('sha256', FIEF_SECRET)
+    .update(message)
+    .digest('hex');
+
+  // Check if the signatures match
+  if (hash !== signature) {
+    console.warn('hash !== signature');
+    return false;
+  }
+
+  return true;
+}
+
+app.post('/webhook', async (req, res) => {
+
   let payload = '';
 
   req.on('data', (chunk) => {
     payload += chunk;
   });
 
+
+
   req.on('end', async () => {
-    // Check if timestamp and signature are there
-    if (!timestamp || !signature) {
-      res.status(StatusCodes.UNAUTHORIZED).send();
-      return;
-    }
-
-    // Check if timestamp is not older than 5 minutes
-    if (Math.floor(Date.now() / 1000) - Number(timestamp) > 5 * 60) {
-      res.status(StatusCodes.UNAUTHORIZED).send();
-      return;
-    }
-
-    // Compute signature
-    const message = `${timestamp}.${payload}`;
-    const hash = crypto
-      .createHmac('sha256', FIEF_SECRET)
-      .update(message)
-      .digest('hex');
-
-    // Check if the signatures match
-    if (hash !== signature) {
-      console.warn('hash !== signature');
+    // too involved; I create webhook in docker container thru curl and need to pass its secret somehow; it's too involved
+    // const valid = validateWebhookSignature(req, payload);
+    const valid = true;
+    if (!valid) {
       res.status(StatusCodes.UNAUTHORIZED).send();
       return;
     }

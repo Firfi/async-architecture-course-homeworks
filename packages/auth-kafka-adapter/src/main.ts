@@ -8,6 +8,7 @@ import * as STR from 'fp-ts/string';
 import { Kafka } from 'kafkajs';
 import { pipe } from 'fp-ts/function';
 import { Request } from 'express-serve-static-core';
+import { Role, User, USER_TOPIC_NAME } from '@monorepo/kafka-users-common';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -25,16 +26,6 @@ const FIEF_EVENT_TYPES = [
   FIEF_EVENT_TYPE_USER_UPDATED,
 ] as const;
 type FiefEventType = (typeof FIEF_EVENT_TYPES)[number];
-
-const ROLE_WORKER = 'worker';
-const ROLE_ADMIN = 'admin';
-const ROLE_MANAGER = 'manager';
-const ROLE_ACCOUNTANT = 'accountant';
-const ROLES = [ROLE_WORKER, ROLE_ADMIN, ROLE_MANAGER, ROLE_ACCOUNTANT] as const;
-
-const Role = S.literal(...ROLES);
-
-const USER_TOPIC_NAME = 'user';
 
 const UserEvent = S.struct({
   type: S.literal(...FIEF_EVENT_TYPES),
@@ -66,14 +57,6 @@ const UserEvent = S.struct({
 });
 
 type UserEvent = S.From<typeof UserEvent>;
-
-const User = S.struct({
-  id: S.string,
-  email: S.string,
-  role: Role,
-});
-
-type User = S.From<typeof User>;
 
 const userEventToUser = (ue: UserEvent): User => ({
   id: ue.data.id,

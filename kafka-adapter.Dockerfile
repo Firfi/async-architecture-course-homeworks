@@ -13,8 +13,10 @@ RUN npm install
 # Copy the application files into the Docker image
 COPY . .
 
+RUN npx nx build auth-kafka-adapter
+
 # Make port 3000 available outside the Docker image
 EXPOSE 3000
 
 # Start the application
-CMD [ "npx", "nx", "serve", "auth-kafka-adapter" ]
+CMD [ "node", "dist/packages/auth-kafka-adapter/main.js" ]

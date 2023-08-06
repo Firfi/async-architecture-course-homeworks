@@ -60,12 +60,6 @@ services:
           printf '.'
           sleep 5
         done
-
-        echo "About to get webhooks..."
-        webhooksResponse=$(curl -s -H "Accept: application/json" \
-                                                 -H "Authorization: Bearer ACAB" \
-                                                 http://localhost:8000/admin/api/webhooks/ || echo "Curl error: $?")
-        webhookCount=$(echo $$webhooksResponse | jq '.count')
         echo "API is up, setting up roles..."
         curl \
           -X POST \
@@ -89,7 +83,11 @@ services:
             }
           }' \
         http://localhost:8000/admin/api/user-fields/ && echo "\n"
-
+        echo "About to get webhooks..."
+        webhooksResponse=$(curl -s -H "Accept: application/json" \
+                                                 -H "Authorization: Bearer ACAB" \
+                                                 http://localhost:8000/admin/api/webhooks/ || echo "Curl error: $?")
+        webhookCount=$(echo $$webhooksResponse | jq '.count')
         if [ -z "$$webhookCount" ] || ! [ "$$webhookCount" -eq "$$webhookCount" ] 2>/dev/null; then
           echo "Could not determine the webhook count, skipping webhook creation..."
         elif [ $$webhookCount -eq 0 ]; then
@@ -106,6 +104,24 @@ services:
         else
           echo "Webhook already exists, skipping creation..."
         fi
+
+        echo "About to get clients..."
+        clientsResponse=$(curl -s -H "Accept: application/json" \
+                                                 -H "Authorization: Bearer ACAB" \
+                                                 http://localhost:8000/admin/api/clients/ || echo "Curl error: $?")
+        clientId=$(echo $$clientsResponse | jq -r '.results[0].id')
+        echo "Client id: $$clientId"
+        curl \
+          -X PATCH http://localhost:8000/admin/api/clients/$$clientId \
+          -H "Authorization: Bearer ACAB" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "redirect_uris": [
+              "http://localhost:3001/auth-callback"
+            ]
+          }' \
+           && echo "\n"
+
   kafka:
     image: docker.io/bitnami/kafka:3.5
     ports:

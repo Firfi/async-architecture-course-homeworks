@@ -17,6 +17,9 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@monorepo/kafka-users-common": [
+        "packages/kafka-users-common/src/index.ts"
+      ],
       "@monorepo/utils": ["packages/utils/src/index.ts"]
     }
   },

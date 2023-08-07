@@ -8,7 +8,13 @@ import * as STR from 'fp-ts/string';
 import { Kafka } from 'kafkajs';
 import { pipe } from 'fp-ts/function';
 import { Request } from 'express-serve-static-core';
-import { Role, User, USER_TOPIC_NAME } from '@monorepo/kafka-users-common';
+import {
+  FiefUserFields,
+  Role,
+  User,
+  USER_TOPIC_NAME,
+  UserId,
+} from '@monorepo/kafka-users-common';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -32,7 +38,7 @@ const UserEvent = S.struct({
   data: S.struct({
     created_at: S.string,
     updated_at: S.string,
-    id: S.string,
+    id: UserId,
     email: S.string,
     is_active: S.boolean,
     is_superuser: S.boolean,
@@ -50,13 +56,11 @@ const UserEvent = S.struct({
       logo_url: S.nullable(S.string),
       application_url: S.nullable(S.string),
     }),
-    fields: S.struct({
-      role: Role,
-    }),
+    fields: FiefUserFields,
   }),
 });
 
-type UserEvent = S.From<typeof UserEvent>;
+type UserEvent = S.To<typeof UserEvent>;
 
 const userEventToUser = (ue: UserEvent): User => ({
   id: ue.data.id,

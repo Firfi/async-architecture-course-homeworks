@@ -1,176 +1,161 @@
 import * as S from '@effect/schema/Schema';
 import { UserId } from '@monorepo/kafka-users-common';
-import { match, P } from 'ts-pattern';
+import { match } from 'ts-pattern';
 import * as O from 'fp-ts/Option';
-import { TaskEither } from 'fp-ts/TaskEither';
 import * as TE from 'fp-ts/TaskEither';
+import * as RTE from 'fp-ts/ReaderTaskEither';
+import { TaskEither } from 'fp-ts/TaskEither';
 import * as E from 'fp-ts/Either';
+import * as Reader from 'fp-ts/Reader';
+import { Either } from 'fp-ts/Either';
 import { v4 } from 'uuid';
 import { flow, pipe } from 'fp-ts/function';
-import { Either } from 'fp-ts/Either';
-
-export const TASK_EVENT_ASSIGN = 'Assign' as const;
-export const TASK_EVENT_COMPLETE = 'Complete' as const;
-
-export const TASK_EVENTS = [TASK_EVENT_ASSIGN, TASK_EVENT_COMPLETE] as const;
-
-export type TaskEvent = (typeof TASK_EVENTS)[number];
-
-export const TASK_STATE_NEW = 'new' as const;
-export const TASK_STATE_ASSIGNED = 'assigned' as const;
-export const TASK_STATE_COMPLETED = 'completed' as const;
-
-export const TASK_STATES = [
-  TASK_STATE_NEW,
+import {
+  tasksStorage,
+  get as getFromDb,
+  set as setInDb,
+  DbWriteError,
+  TaskDbReadError,
+  GetTask,
+  SetTask,
+  DbReadError,
+} from './db';
+import {
+  AssignableTask,
+  AssignedTask,
+  CompletableTask,
+  CompletedTask,
+  NewTask,
+  Task,
+  TASK_EVENT_ASSIGN,
+  TASK_EVENT_COMPLETE,
+  TASK_EVENT_CREATE,
   TASK_STATE_ASSIGNED,
   TASK_STATE_COMPLETED,
-] as const;
+  TASK_STATE_NEW,
+  TaskEvent,
+  TaskEventAssign,
+  TaskEventComplete,
+  TaskEventCreate,
+  TaskId,
+  WithId,
+} from './model';
+import { Option, some } from 'fp-ts/Option';
+import { apply } from 'fp-ts/function';
+import {
+  chainFirstTaskEitherKW,
+  ReaderTaskEither,
+} from 'fp-ts/ReaderTaskEither';
+import { TaskReportError } from './topic';
 
-export type TaskState = (typeof TASK_STATES)[number];
+export type AlreadyExistsError = 'AlreadyExistsError';
+export type WriteNewError = DbWriteError | AlreadyExistsError | TaskDbReadError;
 
-const TaskIdBrand = Symbol.for('TaskId');
-const TaskId = S.string.pipe(S.brand(TaskIdBrand));
-export type TaskId = S.To<typeof TaskId>;
-
-export const WithId = S.struct({
-  id: TaskId,
-});
-
-export type WithId = S.To<typeof WithId>;
-
-const WithDescription = S.struct({
-  description: S.string,
-});
-
-const TaskCommons = WithId.pipe(S.extend(WithDescription));
-
-const NewTask = TaskCommons.pipe(
-  S.extend(
-    S.struct({
-      state: S.literal(TASK_STATE_NEW),
-    })
-  )
-);
-
-type NewTask = S.To<typeof NewTask>;
-
-const AssignedTask = TaskCommons.pipe(
-  S.extend(
-    S.struct({
-      state: S.literal(TASK_STATE_ASSIGNED),
-      assignee: UserId,
-    })
-  )
-);
-
-type AssignedTask = S.To<typeof AssignedTask>;
-
-const CompletedTask = TaskCommons.pipe(
-  S.extend(
-    S.struct({
-      state: S.literal(TASK_STATE_COMPLETED),
-      assignee: UserId,
-    })
-  )
-);
-
-type CompletedTask = S.To<typeof CompletedTask>;
-
-const Task = S.union(NewTask, AssignedTask, CompletedTask);
-export type Task = S.To<typeof Task>;
-
-type AssignableTask = NewTask | AssignedTask /*allowed to reassign*/;
-type CompletableTask = AssignedTask;
-
-const tasksStorage: Map<TaskId, Task> = new Map();
-
-type DbWriteError = 'DbWriteError';
-
-export type WriteNewError = DbWriteError;
-
-type WriteNewResponse = readonly [Task, 'Ok' | 'AlreadyExists'];
-
-// TODO use a real db
 // reaction to a new task; not master data
-const writeNew = (t: NewTask): TaskEither<WriteNewError, WriteNewResponse> =>
-  pipe(
-    tasksStorage.get(t.id),
-    O.fromNullable,
-    O.foldW(
-      () =>
-        TE.tryCatch(
-          async () => {
-            tasksStorage.set(t.id, t);
-            return [t, 'Ok' as const] as const;
+const writeNewTask = (
+  e: TaskEventCreate
+): RTE.ReaderTaskEither<
+  { get: GetTask; set: SetTask },
+  WriteNewError,
+  NewTask
+> =>
+  Reader.asks((deps) =>
+    pipe(
+      deps.get(e.taskId),
+      TE.chainW(
+        O.foldW(
+          () => {
+            const t = {
+              state: TASK_STATE_NEW,
+              description: e.description,
+              id: e.taskId,
+            } satisfies NewTask;
+            return pipe(
+              t,
+              deps.set,
+              TE.map(() => t)
+            );
           },
-          (e) => {
-            console.error('error writing new task', e);
-            return 'DbWriteError' as const;
-          }
-        ),
-      (t) => TE.of([t, 'AlreadyExists' as const] as const)
+          () => TE.left('AlreadyExistsError' as const)
+        )
+      )
     )
   );
 
-type SendEventError = 'SendEventError';
+type SendEventError = TaskReportError;
 
 type SendCreateEventError = SendEventError;
-
-// TODO send to kafka
-const sendCreateEvent = (
-  t: NewTask
-): TaskEither<SendCreateEventError, NewTask> => TE.of(t);
 
 type CreateError = WriteNewError | SendCreateEventError;
 
 // TODO actor?
 export const create = (
   description: string
-): TaskEither<CreateError, WriteNewResponse> =>
+): RTE.ReaderTaskEither<
+  { get: GetTask; set: SetTask; report: ReportTaskEvent },
+  CreateError,
+  NewTask
+> =>
   pipe(
-    v4(),
+    // create event
+    v4(), // assume unique
     S.parseSync(TaskId),
     (id) =>
       ({
-        id,
-        state: TASK_STATE_NEW,
+        taskId: id,
+        type: TASK_EVENT_CREATE,
         description,
-      } satisfies NewTask),
-    sendCreateEvent /*TODO don't care if writeNew fails?*/,
-    TE.chainW(writeNew)
+        timestamp: Date.now(),
+      } satisfies TaskEventCreate),
+    sendTaskEvent /* TODO don't care if writeNewTask fails afterwards */,
+    RTE.chainW(writeNewTask)
   );
 
 type SendAssignEventError = SendEventError;
-
-// just task id is enough
-const sendAssignEvent = <T extends WithId>(
-  t: T
-): TaskEither<SendAssignEventError, T> => TE.of(t);
-
-type WriteAssignError = DbWriteError;
-type TaskNotFoundError = 'TaskNotFound';
+type WriteAssignError =
+  | DbReadError
+  | DbWriteError
+  | TaskNotFoundError
+  | TaskNotAssignableError;
+type TaskNotFoundError = 'TaskNotFoundError';
 type AssignError =
   | WriteAssignError
   | TaskNotFoundError
   | SendAssignEventError
   | TaskNotAssignableError;
 
-const writeAssignedTask = (assignee: UserId) =>
-  TE.tryCatchK(
-    async (t: AssignableTask) => {
-      const updated = {
-        ...t,
-        state: TASK_STATE_ASSIGNED,
-        assignee,
-      } satisfies AssignedTask;
-      tasksStorage.set(t.id, updated);
-
-      return updated;
-    },
-    (e) => {
-      console.error('error writing assigned task', e);
-      return 'DbWriteError' as const;
-    }
+const writeAssignedTask = (
+  e: TaskEventAssign
+): RTE.ReaderTaskEither<
+  { get: GetTask; set: SetTask },
+  WriteAssignError,
+  AssignedTask
+> =>
+  Reader.asks((deps) =>
+    pipe(
+      deps.get(e.taskId),
+      TE.chainW(
+        O.foldW(
+          () => TE.left('TaskNotFoundError' as const),
+          flow(
+            assertTaskAssignable,
+            TE.fromEither,
+            TE.chainW((t) => {
+              const updated = {
+                ...t,
+                state: TASK_STATE_ASSIGNED,
+                assignee: e.assignee,
+              } satisfies AssignedTask;
+              return pipe(
+                updated,
+                deps.set,
+                TE.map(() => updated)
+              );
+            })
+          )
+        )
+      )
+    )
   );
 
 type TaskNotAssignableError = 'TaskNotAssignable';
@@ -185,38 +170,109 @@ const assertTaskAssignable = (
     .otherwise(E.right);
 
 // TODO actor?
-// TODO state machine validation
-export const assign = (
-  taskId: TaskId,
-  assignee: UserId
-): TaskEither<AssignError, AssignedTask> =>
-  pipe(
-    tasksStorage.get(taskId),
-    O.fromNullable,
-    O.foldW(
-      () => TE.left('TaskNotFound' as const),
-      flow(
-        assertTaskAssignable,
-        TE.fromEither,
-        /*we CAN assign again*/ TE.chainW(
-          sendAssignEvent
-        ) /*don't care about write past this point*/,
-        TE.chainW(writeAssignedTask(assignee))
+export const assign =
+  (
+    taskId: TaskId,
+    assignee: UserId
+  ): ReaderTaskEither<
+    { get: GetTask; set: SetTask; report: ReportTaskEvent },
+    AssignError,
+    AssignedTask
+  > =>
+  (deps) =>
+    pipe(
+      taskId,
+      deps.get,
+      TE.chainW(
+        O.foldW(
+          () => TE.left('TaskNotFoundError' as const),
+          flow(
+            assertTaskAssignable,
+            TE.fromEither,
+            TE.chainW((t) => {
+              const e = {
+                type: TASK_EVENT_ASSIGN,
+                taskId: t.id,
+                assignee,
+                timestamp: Date.now(),
+              } satisfies TaskEventAssign;
+              return pipe(
+                sendTaskEvent(e),
+                apply(deps),
+                TE.map((e) => ({ e, t }))
+              );
+            }) /*don't care about write past this point*/,
+            TE.chainW(({ e, t }) =>
+              pipe(
+                e,
+                writeAssignedTask,
+                apply({
+                  get: () => TE.of(some(t)), // cached and in full sync now
+                  set: deps.set,
+                })
+              )
+            )
+          )
+        )
+      )
+    );
+type SendCompleteEventError = SendEventError;
+
+export type ReportTaskEvent = (
+  e: TaskEvent
+) => TaskEither<SendEventError, typeof e>;
+
+const sendTaskEvent = <E extends TaskEvent>(
+  e: E
+): ReaderTaskEither<{ report: ReportTaskEvent }, SendCompleteEventError, E> =>
+  Reader.asks((deps) =>
+    pipe(
+      deps.report(e),
+      TE.map(() => e)
+    )
+  );
+
+type WriteCompleteError =
+  | DbWriteError
+  | TaskDbReadError
+  | TaskNotFoundError
+  | TaskNotCompletableError;
+
+// TODO actor?
+const writeCompletedTask = (
+  e: TaskEventComplete
+): RTE.ReaderTaskEither<
+  { get: GetTask; set: SetTask },
+  WriteCompleteError,
+  CompletedTask
+> =>
+  Reader.asks((deps) =>
+    pipe(
+      deps.get(e.taskId),
+      TE.chainW(
+        O.foldW(
+          () => TE.left('TaskNotFoundError' as const),
+          flow(
+            assertTaskCompletable,
+            TE.fromEither,
+            TE.chainW((t) => {
+              const updated = {
+                ...t,
+                state: TASK_STATE_COMPLETED,
+              } satisfies CompletedTask;
+              return pipe(
+                updated,
+                deps.set,
+                TE.map(() => updated)
+              );
+            })
+          )
+        )
       )
     )
   );
 
-type SendCompleteEventError = SendEventError;
-
-const sendCompleteEvent = <T extends WithId>(
-  t: T
-): TaskEither<SendCompleteEventError, T> => TE.of(t);
-
-type WriteCompleteError = DbWriteError;
-
-// TODO state machine validation
-// TODO actor?
-const writeCompletedTask = TE.tryCatchK(
+TE.tryCatchK(
   async (t: CompletableTask) => {
     const updated = {
       ...t,
@@ -237,9 +293,10 @@ type CompleteError =
   | WriteCompleteError
   | TaskNotFoundError
   | SendCompleteEventError
-  | TaskNotCompletableError;
+  | TaskNotCompletableError
+  | TaskCompletePermissionError;
 
-const assertCompletable = (
+const assertTaskCompletable = (
   t: Task
 ): Either<TaskNotCompletableError, CompletableTask> =>
   match(t)
@@ -251,19 +308,61 @@ const assertCompletable = (
     )
     .otherwise(E.right);
 
-export const complete = (
-  taskId: TaskId
-): TaskEither<CompleteError, CompletedTask> =>
-  pipe(
-    tasksStorage.get(taskId),
-    O.fromNullable,
-    O.foldW(
-      () => TE.left('TaskNotFound' as const),
-      flow(
-        assertCompletable,
-        TE.fromEither,
-        TE.chainW(sendCompleteEvent) /*don't care about write past this point*/,
-        TE.chainW(writeCompletedTask)
+type TaskCompletePermissionError = 'TaskCompletePermissionError';
+
+const assertCanComplete =
+  (actor: UserId) =>
+  (
+    task: CompletableTask
+  ): Either<TaskCompletePermissionError, CompletableTask> => {
+    if (task.assignee === actor) {
+      return E.right(task);
+    }
+    return E.left('TaskCompletePermissionError' as const);
+  };
+
+export const complete =
+  (
+    actor: UserId,
+    taskId: TaskId
+  ): ReaderTaskEither<
+    { get: GetTask; set: SetTask; report: ReportTaskEvent },
+    CompleteError,
+    CompletedTask
+  > =>
+  (deps) =>
+    pipe(
+      taskId,
+      deps.get,
+      TE.chainW(
+        O.foldW(
+          () => TE.left('TaskNotFoundError' as const),
+          flow(
+            assertTaskCompletable,
+            E.chainW(assertCanComplete(actor)),
+            TE.fromEither,
+            TE.chainW((t: CompletableTask) => {
+              const e = {
+                type: TASK_EVENT_COMPLETE,
+                taskId: t.id,
+                timestamp: Date.now(),
+              } satisfies TaskEventComplete;
+              return pipe(
+                sendTaskEvent(e),
+                apply(deps),
+                TE.map((e) => ({ e, t }))
+              );
+            }) /*don't care about write past this point*/,
+            TE.chainW(({ e, t }) =>
+              pipe(
+                writeCompletedTask(e),
+                apply({
+                  get: () => TE.of(some(t)), // cached and in full sync now
+                  set: deps.set,
+                })
+              )
+            )
+          )
+        )
       )
-    )
-  );
+    );

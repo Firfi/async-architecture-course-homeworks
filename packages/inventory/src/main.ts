@@ -5,22 +5,43 @@ import * as fiefExpress from '@fief/fief/express';
 import { Request, Response } from 'express-serve-static-core';
 import { FiefUserInfo } from '@fief/fief/src/client';
 import * as S from '@effect/schema/Schema';
-import {
-  assertExists,
-  assertNonEmptyAndAssigned,
-  castSome,
-} from '@monorepo/utils';
-import { pipe } from 'fp-ts/function';
-import * as STR from 'fp-ts/string';
-import * as RNEA from 'fp-ts/ReadonlyNonEmptyArray';
+import { assertExists, assertNonEmptyAndAssigned } from '@monorepo/utils';
+import { apply, flow, pipe } from 'fp-ts/function';
 import { Kafka } from 'kafkajs';
-import { User, USER_TOPIC_NAME } from '@monorepo/kafka-users-common';
-import { TaskFsm } from './task/fsm';
+import {
+  FiefUser,
+  ROLE_ADMIN,
+  ROLE_MANAGER,
+  User,
+  USER_TOPIC_NAME,
+  UserId,
+} from '@monorepo/kafka-users-common';
+import { users } from './user/db';
+import { isSome } from 'fp-ts/Option';
+import { reassign as reassign_ } from './task/reassigner';
+import { get as getTask, set as setTask, listAssigned } from './task/db';
+import {
+  makeReportReassign,
+  REASSIGN_TOPIC_NAME,
+} from './task/reassigner/kafka';
+import { KAFKA_BROKERS_ENV } from './env';
+import { isLeft } from 'fp-ts/Either';
+import {
+  create as create_,
+  assign as assign_,
+  complete as complete_,
+  ReportTaskEvent,
+} from './task/fsm';
+import { TaskId } from './task/model';
+import { report as report_, TASK_EVENTS_TOPIC_NAME } from './task/topic';
+import bodyParser from 'body-parser';
+import { shuffleStrategy } from './task/reassigner/strategy';
 
-const host = process.env.HOST ?? 'localhost';
+const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 
 const app = express();
+app.use(bodyParser.json());
 
 const SESSION_COOKIE_NAME = 'user_session';
 const REDIRECT_URI = `http://localhost:${port}/auth-callback`;
@@ -56,8 +77,10 @@ type UserInfoCacheId = string;
 
 const userInfoCache = new MemoryUserInfoCache<UserInfoCacheId, FiefUserInfo>();
 
+const OAUTH_BASE_URL = assertNonEmptyAndAssigned(process.env.OAUTH_BASE_URL || 'http://localhost:8000');
+
 const fiefClient = new fief.Fief({
-  baseURL: 'http://localhost:8000',
+  baseURL: OAUTH_BASE_URL,
   clientId: 'GNggKmhPlgowVLktPFRRgiAbOh1JfyY0POXmvIa5kE4',
   clientSecret: 'dp6H8D1gPmdEA4gxd7izO0KDAp9JAbgQswxwTdGQrQo',
 });
@@ -123,33 +146,147 @@ app.get(
     res.json(req.accessTokenInfo);
   }
 );
-
-const KAFKA_BROKERS_ENV = pipe(
-  process.env.KAFKA_BROKERS,
-  assertNonEmptyAndAssigned,
-  STR.split(','),
-  RNEA.filter((s) => s !== ''),
-  castSome
-);
+export const SHUFFLERS = [ROLE_ADMIN, ROLE_MANAGER] as const;
+export const Shuffler = S.literal(...SHUFFLERS);
+export type Shuffler = S.To<typeof Shuffler>;
 
 const kafka = new Kafka({
   clientId: 'inventory',
   brokers: [...KAFKA_BROKERS_ENV],
 });
 
+const producer = kafka.producer();
+const reportTask: ReportTaskEvent = report_(producer);
+
+const reassign = pipe(
+  reassign_,
+  apply({
+    listAssigned: listAssigned,
+    reportReassign: makeReportReassign(producer),
+  })
+);
+
+// reassign
+app.post('/shuffle', fiefAuthMiddleware(), async (req, res) => {
+  const can = pipe(
+    req.user,
+    assertExists,
+    S.parseSync(FiefUser),
+    (u) => u.fields.role,
+    S.parseOption(Shuffler),
+    isSome
+  );
+  if (!can) {
+    res.status(403).send('Forbidden');
+    return;
+  }
+  const r = await reassign();
+  if (isLeft(r)) {
+    console.error('error reassigning', r.left);
+    res.status(500).send('Internal Server Error');
+    return;
+  } else {
+    res.status(200).send('OK');
+    return;
+  }
+});
+
+const deps = {
+  get: getTask,
+  set: setTask,
+  report: reportTask,
+};
+
+const create = flow(create_, apply(deps));
+
+const CreateBody = S.struct({
+  description: S.string.pipe(S.nonEmpty()),
+});
+
+app.get('/a', fiefAuthMiddleware(), (req, res) => {
+  console.log('lal');
+  res.status(200).send('OK');
+})
+
+app.post('/create', fiefAuthMiddleware(), async (req, res) => {
+  const _user = assertExists(req.user); // never trust myself
+  const body = S.parseSync(CreateBody)(req.body);
+  const r = await create(body.description)();
+  if (isLeft(r)) {
+    console.error('error creating', r.left);
+    res.status(500).send('Internal Server Error');
+    return;
+  } else {
+    res.status(200).send('OK');
+    return;
+  }
+});
+
+const assign = flow(assign_, apply(deps));
+
+app.post('/assign/:id', fiefAuthMiddleware(), async (req, res) => {
+  const can = pipe(
+    req.user,
+    assertExists,
+    S.parseSync(FiefUser),
+    (u) => u.fields.role,
+    S.parseOption(Shuffler),
+    isSome
+  );
+  if (!can) {
+    res.status(403).send('Forbidden');
+    return;
+  }
+  const id = S.parseSync(TaskId)(req.params.id);
+  const [assignee, finalize] = shuffleStrategy();
+  const r = await assign(id, assignee.id)();
+  if (isLeft(r)) {
+    console.error('error assigning', r.left);
+    res.status(500).send('Internal Server Error');
+    return;
+  } else {
+    finalize();
+    res.status(200).send('OK');
+    return;
+  }
+});
+
+const complete = flow(complete_, apply(deps));
+
+app.post('/complete/:id', fiefAuthMiddleware(), async (req, res) => {
+  const id = pipe(req.user, assertExists, S.parseSync(FiefUser), (u) => u.sub);
+  const taskId = S.parseSync(TaskId)(req.params.id);
+  const r = await complete(id, taskId)();
+  if (isLeft(r)) {
+    console.error('error completing', r.left);
+    res.status(500).send('Internal Server Error');
+    return;
+  } else {
+    res.status(200).send('OK');
+    return;
+  }
+});
+
 const consumer = kafka.consumer({ groupId: 'inventory' });
 
 app.listen(port, host, async () => {
   console.log(`[ ready ] http://${host}:${port}`);
-  console.log('TaskFsm.serialize()', TaskFsm.serialize());
-  console.log('TaskFsm.states()', TaskFsm.states());
-  console.log('TaskFsm.history', TaskFsm.history);
-
+  // will console.log error if topic already exists
+  await kafka.admin().createTopics({
+    topics: [
+      { topic: TASK_EVENTS_TOPIC_NAME },
+      {
+        topic: REASSIGN_TOPIC_NAME,
+      },
+    ],
+  });
+  await producer.connect();
   await consumer.connect();
   await consumer.subscribe({ topic: USER_TOPIC_NAME, fromBeginning: true });
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
       if (topic === USER_TOPIC_NAME) {
+        // CUDs
         const user = pipe(
           message.value,
           assertExists,
@@ -157,7 +294,8 @@ app.listen(port, host, async () => {
           JSON.parse,
           S.parseSync(User)
         );
-        console.log('user in inventory', user);
+        console.log('adding/updating user', user.email, 'role:', user.role);
+        users.set(user.id, user);
       }
     },
   });

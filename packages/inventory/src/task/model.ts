@@ -11,7 +11,7 @@ export const TASK_STATES = [
 ] as const;
 export type TaskState = (typeof TASK_STATES)[number];
 const TaskIdBrand = Symbol.for('TaskId');
-export const TaskId = S.string.pipe(S.brand(TaskIdBrand));
+export const TaskId = S.UUID.pipe(S.brand(TaskIdBrand));
 export type TaskId = S.To<typeof TaskId>;
 export const WithId = S.struct({
   id: TaskId,
@@ -88,11 +88,15 @@ export const TaskEventCreate = TaskEventCommons.pipe(
 
 export type TaskEventCreate = S.To<typeof TaskEventCreate>;
 
+const MonetaryAmount = S.number.pipe(S.int(), S.nonNegative());
+const MonetaryAmountPositive = MonetaryAmount.pipe(S.positive());
+
 export const TaskEventAssign = TaskEventCommons.pipe(
   S.extend(
     S.struct({
       type: S.literal(TASK_EVENT_ASSIGN),
       assignee: UserId,
+      price: MonetaryAmountPositive,
     })
   )
 );
@@ -103,6 +107,7 @@ export const TaskEventComplete = TaskEventCommons.pipe(
   S.extend(
     S.struct({
       type: S.literal(TASK_EVENT_COMPLETE),
+      reward: MonetaryAmountPositive,
     })
   )
 );

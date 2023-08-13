@@ -1,4 +1,5 @@
 import { Option } from 'fp-ts/Option';
+import { flow } from 'fp-ts/function';
 
 export const assertExists = <T>(x: T): Exclude<T, null | undefined> =>
   x === null || x === undefined
@@ -24,3 +25,16 @@ export const castSome = <T>(x: Option<T>): T => {
   }
   return x.value;
 };
+
+export const uuidToHexUnsafe = (uuid: string) => uuid.replace(/-/g, '');
+
+export const hexToBigintUnsafe = (hex: string /*TODO?*/) => BigInt(`0x${hex}`);
+
+// go around, it's fine
+export const bigintToNumberUnsafe = (x: bigint): number => Number(x);
+
+export const uuidToNumberUnsafe = flow(
+  uuidToHexUnsafe,
+  hexToBigintUnsafe,
+  bigintToNumberUnsafe
+);

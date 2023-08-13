@@ -77,7 +77,9 @@ type UserInfoCacheId = string;
 
 const userInfoCache = new MemoryUserInfoCache<UserInfoCacheId, FiefUserInfo>();
 
-const OAUTH_BASE_URL = assertNonEmptyAndAssigned(process.env.OAUTH_BASE_URL || 'http://localhost:8000');
+const OAUTH_BASE_URL = assertNonEmptyAndAssigned(
+  process.env.OAUTH_BASE_URL || 'http://localhost:8000'
+);
 
 const fiefClient = new fief.Fief({
   baseURL: OAUTH_BASE_URL,

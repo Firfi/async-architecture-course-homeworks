@@ -9,6 +9,7 @@ import * as E from 'fp-ts/Either';
 import * as Reader from 'fp-ts/Reader';
 import { Either } from 'fp-ts/Either';
 import { v4 } from 'uuid';
+import prand, { uniformIntDistribution } from 'pure-rand';
 import { flow, pipe } from 'fp-ts/function';
 import {
   tasksStorage,
@@ -47,6 +48,14 @@ import {
   ReaderTaskEither,
 } from 'fp-ts/ReaderTaskEither';
 import { TaskReportError } from './topic';
+import { uuidToNumberUnsafe } from '@monorepo/utils';
+import { RandomGenerator } from 'pure-rand/lib/types/generator/RandomGenerator';
+import { Writer } from 'fp-ts/Writer';
+import * as W from 'fp-ts/Writer';
+import { State } from 'fp-ts/State';
+import * as ST from 'fp-ts/State';
+import { swap } from 'fp-ts/Tuple';
+import * as IO from 'fp-ts/IO';
 
 export type AlreadyExistsError = 'AlreadyExistsError';
 export type WriteNewError = DbWriteError | AlreadyExistsError | TaskDbReadError;
@@ -88,6 +97,54 @@ type SendCreateEventError = SendEventError;
 
 type CreateError = WriteNewError | SendCreateEventError;
 
+const initTaskCreateEvent = (
+  title: string,
+  description: string
+): TaskEventCreate => ({
+  taskId: S.parseSync(TaskId)(v4()),
+  type: TASK_EVENT_CREATE,
+  title,
+  description,
+  timestamp: Date.now(),
+});
+
+// bigints cause js has no ints
+const ASSIGN_PRICE_MIN = BigInt(10);
+const ASSIGN_PRICE_MAX = BigInt(20);
+
+const COMPLETE_REWARD_MIN = BigInt(20);
+const COMPLETE_REWARD_MAX = BigInt(40);
+
+// non-random random, because we can
+const rngFromTaskId = (taskId: TaskId) =>
+  prand.xoroshiro128plus(uuidToNumberUnsafe(taskId));
+
+// should be db; serializable
+const priceRngs: Map<TaskId, RandomGenerator> = new Map();
+// priceRngs.get(taskId) || rngFromTaskId(taskId)
+const makeTaskPrice_ = (
+  min: BigInt,
+  max: BigInt
+): State<RandomGenerator, BigInt> =>
+  ST.map(BigInt)((g) => uniformIntDistribution(Number(min), Number(max), g));
+
+const makeTaskPrice =
+  (min: BigInt, max: BigInt) =>
+  (taskId: TaskId): IO.IO<BigInt> => {
+    return () => {
+      const rng = priceRngs.get(taskId) || rngFromTaskId(taskId);
+      const [price, rng2] = makeTaskPrice_(min, max)(rng);
+      priceRngs.set(taskId, rng2);
+      return price;
+    };
+  };
+
+const makeTaskAssignPrice = makeTaskPrice(ASSIGN_PRICE_MIN, ASSIGN_PRICE_MAX);
+const makeTaskCompleteReward = makeTaskPrice(
+  COMPLETE_REWARD_MIN,
+  COMPLETE_REWARD_MAX
+);
+
 // TODO actor?
 export const create = (
   title: string,
@@ -98,17 +155,7 @@ export const create = (
   NewTask
 > =>
   pipe(
-    // create event
-    v4(), // assume unique
-    S.parseSync(TaskId),
-    (id) =>
-      ({
-        taskId: id,
-        type: TASK_EVENT_CREATE,
-        title,
-        description,
-        timestamp: Date.now(),
-      } satisfies TaskEventCreate),
+    initTaskCreateEvent(title, description),
     sendTaskEvent /* TODO don't care if writeNewTask fails afterwards */,
     RTE.chainW(writeNewTask)
   );
@@ -171,6 +218,20 @@ const assertTaskAssignable = (
     )
     .otherwise(E.right);
 
+const makeTaskAssignEvent =
+  (assignee: UserId) =>
+  (taskId: TaskId): IO.IO<TaskEventAssign> =>
+    pipe(
+      makeTaskAssignPrice(taskId),
+      IO.map((price) => ({
+        type: TASK_EVENT_ASSIGN,
+        taskId,
+        assignee,
+        timestamp: Date.now(),
+        price: Number(price),
+      }))
+    );
+
 // TODO actor?
 export const assign =
   (
@@ -192,14 +253,11 @@ export const assign =
             assertTaskAssignable,
             TE.fromEither,
             TE.chainW((t) => {
-              const e = {
-                type: TASK_EVENT_ASSIGN,
-                taskId: t.id,
-                assignee,
-                timestamp: Date.now(),
-              } satisfies TaskEventAssign;
+              const e = makeTaskAssignEvent(assignee)(t.id);
               return pipe(
-                sendTaskEvent(e),
+                e,
+                RTE.fromIO,
+                RTE.chainW(sendTaskEvent),
                 apply(deps),
                 TE.map((e) => ({ e, t }))
               );
@@ -322,6 +380,17 @@ const assertCanComplete =
     return E.left('TaskCompletePermissionError' as const);
   };
 
+const makeTaskCompleteEvent = (taskId: TaskId): IO.IO<TaskEventComplete> =>
+  pipe(
+    makeTaskCompleteReward(taskId),
+    IO.map((reward) => ({
+      type: TASK_EVENT_COMPLETE,
+      taskId,
+      timestamp: Date.now(),
+      reward: Number(reward),
+    }))
+  );
+
 export const complete =
   (
     actor: UserId,
@@ -343,13 +412,11 @@ export const complete =
             E.chainW(assertCanComplete(actor)),
             TE.fromEither,
             TE.chainW((t: CompletableTask) => {
-              const e = {
-                type: TASK_EVENT_COMPLETE,
-                taskId: t.id,
-                timestamp: Date.now(),
-              } satisfies TaskEventComplete;
+              const e = makeTaskCompleteEvent(t.id);
               return pipe(
-                sendTaskEvent(e),
+                e,
+                RTE.fromIO,
+                RTE.chainW(sendTaskEvent),
                 apply(deps),
                 TE.map((e) => ({ e, t }))
               );

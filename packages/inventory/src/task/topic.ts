@@ -5,8 +5,7 @@ import {
   TASK_EVENT_CURRENT_VERSIONS,
   TaskEvent,
 } from '@monorepo/inventory-common/schema';
-
-export const TASK_EVENTS_TOPIC_NAME = 'task-events'; // not CUD
+import { TASK_EVENTS_TOPIC_NAME } from '../../../kafka-users-common/src/lib/topics';
 
 export type TaskReportError = 'TaskReportError';
 

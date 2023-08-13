@@ -369,12 +369,16 @@ const assertCanComplete =
     return E.left('TaskCompletePermissionError' as const);
   };
 
-const makeTaskCompleteEvent = (taskId: TaskId): TaskEventComplete =>
+const makeTaskCompleteEvent = (
+  taskId: TaskId,
+  userId: UserId
+): TaskEventComplete =>
   pipe(
     makeTaskCompleteReward(taskId),
     reward => ({
       type: TASK_EVENT_COMPLETE,
       taskId,
+      userId,
       timestamp: Date.now(),
       reward: Number(reward),
       version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_COMPLETE],
@@ -402,8 +406,8 @@ export const complete =
             E.chainW(assertCanComplete(actor)),
             TE.fromEither,
             TE.chainW((t: CompletableTask) => pipe(
-              t.id,
-              makeTaskCompleteEvent,
+              [t.id, actor],
+              tupled(makeTaskCompleteEvent),
               sendTaskEvent,
               apply(deps),
               TE.map((e) => ({ e, t }))

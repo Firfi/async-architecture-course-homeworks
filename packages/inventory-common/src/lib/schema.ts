@@ -86,6 +86,7 @@ export const TaskEventCompleteV1 = TaskEventCommons.pipe(
       type: S.literal(TASK_EVENT_COMPLETE),
       reward: MonetaryAmountPositive,
       version: S.literal(CURRENT_TASK_EVENT_COMPLETE_VERSION),
+      userId: UserId,
     })
   )
 );

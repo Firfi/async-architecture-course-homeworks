@@ -18,13 +18,15 @@ import {
 } from '@monorepo/kafka-users-common';
 import { users } from './user/db';
 import { isSome } from 'fp-ts/Option';
-import { reassign as reassign_ } from './task/reassigner';
+import {
+  listen as listenReassign,
+  reassign as reassign_,
+} from './task/reassigner';
 import { get as getTask, set as setTask, listAssigned } from './task/db';
 import {
   makeReportReassign,
   REASSIGN_TOPIC_NAME,
 } from './task/reassigner/kafka';
-import { KAFKA_BROKERS_ENV } from './env';
 import { isLeft } from 'fp-ts/Either';
 import {
   create as create_,
@@ -32,7 +34,7 @@ import {
   complete as complete_,
   ReportTaskEvent,
 } from './task/fsm';
-import { report as report_, TASK_EVENTS_TOPIC_NAME } from './task/topic';
+import { report as report_ } from './task/topic';
 import bodyParser from 'body-parser';
 import { shuffleStrategy } from './task/reassigner/strategy';
 import { match } from 'ts-pattern';
@@ -44,6 +46,8 @@ import {
   TaskEvent,
   TaskId,
 } from '@monorepo/inventory-common/schema';
+import { KAFKA_BROKERS_ENV } from '@monorepo/kafka-users-common';
+import { TASK_EVENTS_TOPIC_NAME } from '../../kafka-users-common/src/lib/topics';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
@@ -305,6 +309,11 @@ app.listen(port, host, async () => {
         users.set(user.id, user);
       }
     },
+  });
+  await listenReassign({
+    get: getTask,
+    set: setTask,
+    report: reportTask,
   });
 });
 

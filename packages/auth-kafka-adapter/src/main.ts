@@ -1,12 +1,8 @@
 import express from 'express';
-import { assertNonEmptyAndAssigned, castSome } from '@monorepo/utils';
 import crypto from 'crypto';
 import { StatusCodes } from 'http-status-codes';
 import * as S from '@effect/schema/Schema';
-import * as RNEA from 'fp-ts/ReadonlyNonEmptyArray';
-import * as STR from 'fp-ts/string';
 import { Kafka } from 'kafkajs';
-import { pipe } from 'fp-ts/function';
 import { Request } from 'express-serve-static-core';
 import {
   FiefUserFields,
@@ -15,6 +11,7 @@ import {
   USER_TOPIC_NAME,
   UserId,
 } from '@monorepo/kafka-users-common';
+import { KAFKA_BROKERS_ENV } from '@monorepo/kafka-users-common';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -67,15 +64,6 @@ const userEventToUser = (ue: UserEvent): User => ({
   email: ue.data.email,
   role: ue.data.fields.role,
 });
-
-// comma-separated i.e. kafka1:9092,kafka2:9092
-const KAFKA_BROKERS_ENV = pipe(
-  process.env.KAFKA_BROKERS,
-  assertNonEmptyAndAssigned,
-  STR.split(','),
-  RNEA.filter((s) => s !== ''),
-  castSome
-);
 
 const kafka = new Kafka({
   clientId: 'auth-adapter',

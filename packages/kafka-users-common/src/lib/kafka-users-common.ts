@@ -13,7 +13,7 @@ export const ROLES = [
 
 export const Role = S.literal(...ROLES);
 
-const UserIdBrand = Symbol.for('UserId');
+export const UserIdBrand = Symbol.for('UserId');
 export const UserId = S.string.pipe(S.brand(UserIdBrand));
 export type UserId = S.To<typeof UserId>;
 

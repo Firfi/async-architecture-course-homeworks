@@ -1,11 +1,12 @@
 // TODO persist
-import { AssignedTask, Task, TASK_STATE_ASSIGNED, TaskId } from './model';
+import { AssignedTask, Task, TASK_STATE_ASSIGNED } from './model';
 import { TaskEither } from 'fp-ts/TaskEither';
 import * as TE from 'fp-ts/TaskEither';
 import { Option } from 'fp-ts/Option';
 import * as O from 'fp-ts/Option';
 import * as A from 'fp-ts/Array';
 import { flow } from 'fp-ts/function';
+import { TaskId } from '@monorepo/inventory-common/schema';
 
 export type DbReadError = 'DbReadError';
 export type DbWriteError = 'DbWriteError';

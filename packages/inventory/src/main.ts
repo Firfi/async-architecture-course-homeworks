@@ -32,10 +32,18 @@ import {
   complete as complete_,
   ReportTaskEvent,
 } from './task/fsm';
-import { TaskId } from './task/model';
 import { report as report_, TASK_EVENTS_TOPIC_NAME } from './task/topic';
 import bodyParser from 'body-parser';
 import { shuffleStrategy } from './task/reassigner/strategy';
+import { match } from 'ts-pattern';
+import {
+  JiraId,
+  TASK_EVENT_ASSIGN,
+  TASK_EVENT_COMPLETE,
+  TASK_EVENT_CREATE,
+  TaskEvent,
+  TaskId,
+} from '@monorepo/inventory-common/schema';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
@@ -203,13 +211,14 @@ const create = flow(create_, apply(deps));
 
 const CreateBody = S.struct({
   title: S.string.pipe(S.nonEmpty()),
+  jiraId: JiraId,
   description: S.string.pipe(S.nonEmpty()),
 });
 
 app.post('/create', fiefAuthMiddleware(), async (req, res) => {
   const _user = assertExists(req.user); // never trust myself
   const body = S.parseSync(CreateBody)(req.body);
-  const r = await create(body.title, body.description)();
+  const r = await create(body.title, body.jiraId, body.description)();
   if (isLeft(r)) {
     console.error('error creating', r.left);
     res.status(500).send('Internal Server Error');
@@ -298,3 +307,53 @@ app.listen(port, host, async () => {
     },
   });
 });
+
+// example consumer code for task events
+const consumeTaskEvent = async (taskEvent: TaskEvent) =>
+  match(taskEvent)
+    .with(
+      {
+        type: TASK_EVENT_CREATE,
+      },
+      (t_) =>
+        match(t_)
+          .with(
+            {
+              version: 1,
+            },
+            (t) => {
+              const v: 1 = t.version;
+              // @ts-expect-error-next-line
+              const j: never = t.jiraId;
+            }
+          )
+          .with(
+            {
+              version: 2,
+            },
+            (t) => {
+              const v: 2 = t.version;
+              const j: JiraId = t.jiraId;
+            }
+          )
+          .exhaustive()
+    )
+    .with(
+      {
+        type: TASK_EVENT_ASSIGN,
+      },
+      (t_) => {
+        const v: 1 = t_.version;
+        const a: UserId = t_.assignee;
+      }
+    )
+    .with(
+      {
+        type: TASK_EVENT_COMPLETE,
+      },
+      (t_) => {
+        const v: 1 = t_.version;
+        const r: number = t_.reward;
+      }
+    )
+    .exhaustive();

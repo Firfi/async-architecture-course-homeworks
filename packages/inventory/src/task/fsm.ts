@@ -10,11 +10,9 @@ import * as Reader from 'fp-ts/Reader';
 import { Either } from 'fp-ts/Either';
 import { v4 } from 'uuid';
 import prand, { uniformIntDistribution } from 'pure-rand';
-import { flow, pipe } from 'fp-ts/function';
+import { flow, pipe, tupled } from 'fp-ts/function';
 import {
   tasksStorage,
-  get as getFromDb,
-  set as setInDb,
   DbWriteError,
   TaskDbReadError,
   GetTask,
@@ -28,34 +26,31 @@ import {
   CompletedTask,
   NewTask,
   Task,
-  TASK_EVENT_ASSIGN,
-  TASK_EVENT_COMPLETE,
-  TASK_EVENT_CREATE,
   TASK_STATE_ASSIGNED,
   TASK_STATE_COMPLETED,
   TASK_STATE_NEW,
+} from './model';
+import { some } from 'fp-ts/Option';
+import { apply } from 'fp-ts/function';
+import { ReaderTaskEither } from 'fp-ts/ReaderTaskEither';
+import { TaskReportError } from './topic';
+import { uuidToNumberUnsafe } from '@monorepo/utils';
+import { RandomGenerator } from 'pure-rand/lib/types/generator/RandomGenerator';
+import { State } from 'fp-ts/State';
+import * as ST from 'fp-ts/State';
+import * as IO from 'fp-ts/IO';
+import {
+  JiraId,
+  TASK_EVENT_ASSIGN,
+  TASK_EVENT_COMPLETE,
+  TASK_EVENT_CREATE,
+  TASK_EVENT_CURRENT_VERSIONS,
   TaskEvent,
   TaskEventAssign,
   TaskEventComplete,
   TaskEventCreate,
   TaskId,
-  WithId,
-} from './model';
-import { Option, some } from 'fp-ts/Option';
-import { apply } from 'fp-ts/function';
-import {
-  chainFirstTaskEitherKW,
-  ReaderTaskEither,
-} from 'fp-ts/ReaderTaskEither';
-import { TaskReportError } from './topic';
-import { uuidToNumberUnsafe } from '@monorepo/utils';
-import { RandomGenerator } from 'pure-rand/lib/types/generator/RandomGenerator';
-import { Writer } from 'fp-ts/Writer';
-import * as W from 'fp-ts/Writer';
-import { State } from 'fp-ts/State';
-import * as ST from 'fp-ts/State';
-import { swap } from 'fp-ts/Tuple';
-import * as IO from 'fp-ts/IO';
+} from '@monorepo/inventory-common/schema';
 
 export type AlreadyExistsError = 'AlreadyExistsError';
 export type WriteNewError = DbWriteError | AlreadyExistsError | TaskDbReadError;
@@ -99,6 +94,7 @@ type CreateError = WriteNewError | SendCreateEventError;
 
 const initTaskCreateEvent = (
   title: string,
+  jiraId: JiraId,
   description: string,
 ): TaskEventCreate =>
   pipe(S.parseSync(TaskId)(v4()), flow(id => pipe(id, makeTaskCreatePrice, price => ({
@@ -106,8 +102,10 @@ const initTaskCreateEvent = (
     price: Number(price),
     type: TASK_EVENT_CREATE,
     title,
+    jiraId,
     description,
     timestamp: Date.now(),
+    version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE],
   }))))
 
 // bigints cause js has no ints
@@ -145,6 +143,7 @@ const makeTaskCompleteReward = makeTaskPrice(
 // TODO actor?
 export const create = (
   title: string,
+  jiraId: JiraId,
   description: string
 ): RTE.ReaderTaskEither<
   { get: GetTask; set: SetTask; report: ReportTaskEvent },
@@ -152,7 +151,8 @@ export const create = (
   NewTask
 > =>
   pipe(
-    initTaskCreateEvent(title, description),
+    [title, jiraId, description],
+    tupled(initTaskCreateEvent),
     sendTaskEvent /* TODO don't care if writeNewTask fails afterwards */,
     RTE.chainW(writeNewTask)
   );
@@ -222,6 +222,7 @@ const makeTaskAssignEvent =
     taskId,
     assignee,
     timestamp: Date.now(),
+    version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_ASSIGN],
   })
 
 // TODO actor?
@@ -376,6 +377,7 @@ const makeTaskCompleteEvent = (taskId: TaskId): TaskEventComplete =>
       taskId,
       timestamp: Date.now(),
       reward: Number(reward),
+      version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_COMPLETE],
     })
   );
 

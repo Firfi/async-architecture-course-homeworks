@@ -76,27 +76,29 @@ export const TaskEventCommons = S.struct({
   timestamp: S.number.pipe(S.int(), S.nonNegative()),
 });
 
+
+
+const MonetaryAmount = S.number.pipe(S.int(), S.nonNegative());
+const MonetaryAmountPositive = MonetaryAmount.pipe(S.positive());
+
 export const TaskEventCreate = TaskEventCommons.pipe(
   S.extend(
     S.struct({
       type: S.literal(TASK_EVENT_CREATE),
       title: S.string,
       description: S.string,
+      price: MonetaryAmountPositive,
     })
   )
 );
 
 export type TaskEventCreate = S.To<typeof TaskEventCreate>;
 
-const MonetaryAmount = S.number.pipe(S.int(), S.nonNegative());
-const MonetaryAmountPositive = MonetaryAmount.pipe(S.positive());
-
 export const TaskEventAssign = TaskEventCommons.pipe(
   S.extend(
     S.struct({
       type: S.literal(TASK_EVENT_ASSIGN),
       assignee: UserId,
-      price: MonetaryAmountPositive,
     })
   )
 );

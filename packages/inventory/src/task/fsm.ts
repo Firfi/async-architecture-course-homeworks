@@ -99,14 +99,16 @@ type CreateError = WriteNewError | SendCreateEventError;
 
 const initTaskCreateEvent = (
   title: string,
-  description: string
-): TaskEventCreate => ({
-  taskId: S.parseSync(TaskId)(v4()),
-  type: TASK_EVENT_CREATE,
-  title,
-  description,
-  timestamp: Date.now(),
-});
+  description: string,
+): TaskEventCreate =>
+  pipe(S.parseSync(TaskId)(v4()), flow(id => pipe(id, makeTaskCreatePrice, price => ({
+    taskId: id,
+    price: Number(price),
+    type: TASK_EVENT_CREATE,
+    title,
+    description,
+    timestamp: Date.now(),
+  }))))
 
 // bigints cause js has no ints
 const ASSIGN_PRICE_MIN = BigInt(10);
@@ -119,8 +121,6 @@ const COMPLETE_REWARD_MAX = BigInt(40);
 const rngFromTaskId = (taskId: TaskId) =>
   prand.xoroshiro128plus(uuidToNumberUnsafe(taskId));
 
-// should be db; serializable
-const priceRngs: Map<TaskId, RandomGenerator> = new Map();
 // priceRngs.get(taskId) || rngFromTaskId(taskId)
 const makeTaskPrice_ = (
   min: BigInt,
@@ -130,16 +130,13 @@ const makeTaskPrice_ = (
 
 const makeTaskPrice =
   (min: BigInt, max: BigInt) =>
-  (taskId: TaskId): IO.IO<BigInt> => {
-    return () => {
-      const rng = priceRngs.get(taskId) || rngFromTaskId(taskId);
-      const [price, rng2] = makeTaskPrice_(min, max)(rng);
-      priceRngs.set(taskId, rng2);
-      return price;
-    };
+  (taskId: TaskId): BigInt => {
+    const rng = rngFromTaskId(taskId); // priceRngs.get(taskId) || rngFromTaskId(taskId);
+    const [price, ignoredRng2_] = makeTaskPrice_(min, max)(rng);
+    return price;
   };
 
-const makeTaskAssignPrice = makeTaskPrice(ASSIGN_PRICE_MIN, ASSIGN_PRICE_MAX);
+const makeTaskCreatePrice = makeTaskPrice(ASSIGN_PRICE_MIN, ASSIGN_PRICE_MAX);
 const makeTaskCompleteReward = makeTaskPrice(
   COMPLETE_REWARD_MIN,
   COMPLETE_REWARD_MAX
@@ -220,17 +217,12 @@ const assertTaskAssignable = (
 
 const makeTaskAssignEvent =
   (assignee: UserId) =>
-  (taskId: TaskId): IO.IO<TaskEventAssign> =>
-    pipe(
-      makeTaskAssignPrice(taskId),
-      IO.map((price) => ({
-        type: TASK_EVENT_ASSIGN,
-        taskId,
-        assignee,
-        timestamp: Date.now(),
-        price: Number(price),
-      }))
-    );
+  (taskId: TaskId): TaskEventAssign => ({
+    type: TASK_EVENT_ASSIGN,
+    taskId,
+    assignee,
+    timestamp: Date.now(),
+  })
 
 // TODO actor?
 export const assign =
@@ -252,16 +244,12 @@ export const assign =
           flow(
             assertTaskAssignable,
             TE.fromEither,
-            TE.chainW((t) => {
-              const e = makeTaskAssignEvent(assignee)(t.id);
-              return pipe(
-                e,
-                RTE.fromIO,
-                RTE.chainW(sendTaskEvent),
-                apply(deps),
-                TE.map((e) => ({ e, t }))
-              );
-            }) /*don't care about write past this point*/,
+            TE.chainW((t) => pipe(
+              makeTaskAssignEvent(assignee)(t.id),
+              sendTaskEvent,
+              apply(deps),
+              TE.map((e) => ({ e, t }))
+            )) /*don't care about write past this point*/,
             TE.chainW(({ e, t }) =>
               pipe(
                 e,
@@ -380,15 +368,15 @@ const assertCanComplete =
     return E.left('TaskCompletePermissionError' as const);
   };
 
-const makeTaskCompleteEvent = (taskId: TaskId): IO.IO<TaskEventComplete> =>
+const makeTaskCompleteEvent = (taskId: TaskId): TaskEventComplete =>
   pipe(
     makeTaskCompleteReward(taskId),
-    IO.map((reward) => ({
+    reward => ({
       type: TASK_EVENT_COMPLETE,
       taskId,
       timestamp: Date.now(),
       reward: Number(reward),
-    }))
+    })
   );
 
 export const complete =
@@ -411,16 +399,13 @@ export const complete =
             assertTaskCompletable,
             E.chainW(assertCanComplete(actor)),
             TE.fromEither,
-            TE.chainW((t: CompletableTask) => {
-              const e = makeTaskCompleteEvent(t.id);
-              return pipe(
-                e,
-                RTE.fromIO,
-                RTE.chainW(sendTaskEvent),
-                apply(deps),
-                TE.map((e) => ({ e, t }))
-              );
-            }) /*don't care about write past this point*/,
+            TE.chainW((t: CompletableTask) => pipe(
+              t.id,
+              makeTaskCompleteEvent,
+              sendTaskEvent,
+              apply(deps),
+              TE.map((e) => ({ e, t }))
+            )) /*don't care about write past this point*/,
             TE.chainW(({ e, t }) =>
               pipe(
                 writeCompletedTask(e),

@@ -80,6 +80,7 @@ export const TaskEventCreate = TaskEventCommons.pipe(
   S.extend(
     S.struct({
       type: S.literal(TASK_EVENT_CREATE),
+      title: S.string,
       description: S.string,
     })
   )

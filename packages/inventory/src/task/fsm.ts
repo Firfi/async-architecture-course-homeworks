@@ -90,6 +90,7 @@ type CreateError = WriteNewError | SendCreateEventError;
 
 // TODO actor?
 export const create = (
+  title: string,
   description: string
 ): RTE.ReaderTaskEither<
   { get: GetTask; set: SetTask; report: ReportTaskEvent },
@@ -104,6 +105,7 @@ export const create = (
       ({
         taskId: id,
         type: TASK_EVENT_CREATE,
+        title,
         description,
         timestamp: Date.now(),
       } satisfies TaskEventCreate),
@@ -279,7 +281,6 @@ TE.tryCatchK(
       state: TASK_STATE_COMPLETED,
     } satisfies CompletedTask;
     tasksStorage.set(t.id, updated);
-
     return updated;
   },
   (e) => {

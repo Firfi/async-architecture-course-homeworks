@@ -200,18 +200,14 @@ const deps = {
 const create = flow(create_, apply(deps));
 
 const CreateBody = S.struct({
+  title: S.string.pipe(S.nonEmpty()),
   description: S.string.pipe(S.nonEmpty()),
 });
-
-app.get('/a', fiefAuthMiddleware(), (req, res) => {
-  console.log('lal');
-  res.status(200).send('OK');
-})
 
 app.post('/create', fiefAuthMiddleware(), async (req, res) => {
   const _user = assertExists(req.user); // never trust myself
   const body = S.parseSync(CreateBody)(req.body);
-  const r = await create(body.description)();
+  const r = await create(body.title, body.description)();
   if (isLeft(r)) {
     console.error('error creating', r.left);
     res.status(500).send('Internal Server Error');

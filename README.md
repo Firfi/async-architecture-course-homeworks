@@ -22,6 +22,6 @@ set `fief_session=YOUR_FIEF_SESSION_COOKIE_FROM_BROWSER; Path=/; Expires=Tue, 06
 
 add/edit a user in http://localhost:8000/admin/users/
 
-`POST` i.e. /create with body {"description": "123"} (and type json) to check creation works
+`POST` i.e. /create with body {"title": "tottle", "description": "123"} (and type json) to check creation works
 
 

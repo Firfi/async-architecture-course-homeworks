@@ -1,5 +1,6 @@
 import * as S from '@effect/schema/Schema';
 import { UserId } from '@monorepo/kafka-users-common';
+import { MonetaryAmountPositive } from '@monorepo/utils';
 
 const TaskIdBrand = Symbol.for('TaskId');
 export const TaskId = S.UUID.pipe(S.brand(TaskIdBrand));
@@ -33,8 +34,7 @@ export const TaskEventCommons = S.struct({
   timestamp: S.number.pipe(S.int(), S.nonNegative()),
   version: VersionNumber, // no brand
 });
-const MonetaryAmount = S.number.pipe(S.int(), S.nonNegative());
-const MonetaryAmountPositive = MonetaryAmount.pipe(S.positive());
+
 export const TaskEventCreateV1 = TaskEventCommons.pipe(
   S.extend(
     S.struct({
@@ -75,6 +75,7 @@ export const TaskEventAssignV1 = TaskEventCommons.pipe(
       type: S.literal(TASK_EVENT_ASSIGN),
       assignee: UserId,
       version: S.literal(CURRENT_TASK_EVENT_ASSIGN_VERSION),
+      price: MonetaryAmountPositive,
     })
   )
 );

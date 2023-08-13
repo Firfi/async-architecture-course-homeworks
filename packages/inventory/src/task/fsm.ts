@@ -73,6 +73,7 @@ const writeNewTask = (
               state: TASK_STATE_NEW,
               description: e.description,
               id: e.taskId,
+              price: e.price,
             } satisfies NewTask;
             return pipe(
               t,
@@ -95,18 +96,23 @@ type CreateError = WriteNewError | SendCreateEventError;
 const initTaskCreateEvent = (
   title: string,
   jiraId: JiraId,
-  description: string,
+  description: string
 ): TaskEventCreate =>
-  pipe(S.parseSync(TaskId)(v4()), flow(id => pipe(id, makeTaskCreatePrice, price => ({
-    taskId: id,
-    price: Number(price),
-    type: TASK_EVENT_CREATE,
-    title,
-    jiraId,
-    description,
-    timestamp: Date.now(),
-    version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE],
-  }))))
+  pipe(
+    S.parseSync(TaskId)(v4()),
+    flow((id) =>
+      pipe(id, makeTaskCreatePrice, (price) => ({
+        taskId: id,
+        price: Number(price),
+        type: TASK_EVENT_CREATE,
+        title,
+        jiraId,
+        description,
+        timestamp: Date.now(),
+        version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE],
+      }))
+    )
+  );
 
 // bigints cause js has no ints
 const ASSIGN_PRICE_MIN = BigInt(10);
@@ -217,13 +223,14 @@ const assertTaskAssignable = (
 
 const makeTaskAssignEvent =
   (assignee: UserId) =>
-  (taskId: TaskId): TaskEventAssign => ({
+  (taskId: TaskId, currentPrice: number): TaskEventAssign => ({
     type: TASK_EVENT_ASSIGN,
     taskId,
     assignee,
     timestamp: Date.now(),
     version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_ASSIGN],
-  })
+    price: currentPrice,
+  });
 
 // TODO actor?
 export const assign =
@@ -245,12 +252,14 @@ export const assign =
           flow(
             assertTaskAssignable,
             TE.fromEither,
-            TE.chainW((t) => pipe(
-              makeTaskAssignEvent(assignee)(t.id),
-              sendTaskEvent,
-              apply(deps),
-              TE.map((e) => ({ e, t }))
-            )) /*don't care about write past this point*/,
+            TE.chainW((t) =>
+              pipe(
+                makeTaskAssignEvent(assignee)(t.id, t.price),
+                sendTaskEvent,
+                apply(deps),
+                TE.map((e) => ({ e, t }))
+              )
+            ) /*don't care about write past this point*/,
             TE.chainW(({ e, t }) =>
               pipe(
                 e,
@@ -373,17 +382,14 @@ const makeTaskCompleteEvent = (
   taskId: TaskId,
   userId: UserId
 ): TaskEventComplete =>
-  pipe(
-    makeTaskCompleteReward(taskId),
-    reward => ({
-      type: TASK_EVENT_COMPLETE,
-      taskId,
-      userId,
-      timestamp: Date.now(),
-      reward: Number(reward),
-      version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_COMPLETE],
-    })
-  );
+  pipe(makeTaskCompleteReward(taskId), (reward) => ({
+    type: TASK_EVENT_COMPLETE,
+    taskId,
+    userId,
+    timestamp: Date.now(),
+    reward: Number(reward),
+    version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_COMPLETE],
+  }));
 
 export const complete =
   (
@@ -405,13 +411,15 @@ export const complete =
             assertTaskCompletable,
             E.chainW(assertCanComplete(actor)),
             TE.fromEither,
-            TE.chainW((t: CompletableTask) => pipe(
-              [t.id, actor],
-              tupled(makeTaskCompleteEvent),
-              sendTaskEvent,
-              apply(deps),
-              TE.map((e) => ({ e, t }))
-            )) /*don't care about write past this point*/,
+            TE.chainW((t: CompletableTask) =>
+              pipe(
+                [t.id, actor],
+                tupled(makeTaskCompleteEvent),
+                sendTaskEvent,
+                apply(deps),
+                TE.map((e) => ({ e, t }))
+              )
+            ) /*don't care about write past this point*/,
             TE.chainW(({ e, t }) =>
               pipe(
                 writeCompletedTask(e),

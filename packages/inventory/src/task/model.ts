@@ -5,6 +5,7 @@ import {
   TASK_EVENT_COMPLETE,
   TaskId,
 } from '@monorepo/inventory-common/schema';
+import { MonetaryAmountPositive } from '@monorepo/utils';
 
 export const TASK_STATE_NEW = 'new' as const;
 export const TASK_STATE_ASSIGNED = 'assigned' as const;
@@ -23,9 +24,16 @@ export const WithDescription = S.struct({
   description: S.string,
 });
 
+export const WithPrice = S.struct({
+  price: MonetaryAmountPositive,
+});
+
 // TODO updatedAt; what is updatedAt? TODO stateUpdatedAt
 
-export const TaskCommons = WithId.pipe(S.extend(WithDescription));
+export const TaskCommons = WithId.pipe(
+  S.extend(WithDescription),
+  S.extend(WithPrice)
+);
 export const NewTask = TaskCommons.pipe(
   S.extend(
     S.struct({

@@ -9,7 +9,7 @@ import {
 } from '@monorepo/inventory-common/schema';
 import { match } from 'ts-pattern';
 import { penalty, reward } from './db';
-import { consumer } from './kafka';
+import { consumer, reportAccountsAggregate } from './kafka';
 
 export const run = async () => {
   await consumer.connect();
@@ -28,12 +28,22 @@ export const run = async () => {
         S.parseSync(TaskEvent)
       );
       match(event)
-        .with({ type: TASK_EVENT_ASSIGN }, (t) => {
+        .with({ type: TASK_EVENT_ASSIGN }, async (t) => {
           // TODO idempotency key from the message (key?)
-          penalty(t.assignee, t.taskId, BigInt(t.price));
+          const aggregates = penalty(t.assignee, t.taskId, BigInt(t.price))('transaction todo');
+          // do not care about this being reliably sent, yet
+          await reportAccountsAggregate(t.assignee, {
+            current: aggregates.current,
+            previous: aggregates.previous,
+          }, new Date(t.timestamp));
         })
-        .with({ type: TASK_EVENT_COMPLETE }, (t) => {
-          reward(t.userId, t.taskId, BigInt(t.reward));
+        .with({ type: TASK_EVENT_COMPLETE }, async (t) => {
+          const aggregates = reward(t.userId, t.taskId, BigInt(t.reward))('transaction todo');
+          // do not care about this being reliably sent, yet
+          await reportAccountsAggregate(t.userId, {
+            current: aggregates.current,
+            previous: aggregates.previous,
+          }, new Date(t.timestamp));
         });
     },
   });

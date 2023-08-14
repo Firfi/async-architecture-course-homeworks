@@ -4,8 +4,8 @@ import { pipe } from 'fp-ts/function';
 import * as A from 'fp-ts/Array';
 
 const BOOK_MAGIC_REVENUE = 'magicRevenue' as const;
-const BOOK_COMPANY_STONKS = 'companyStonks' as const;
-const BOOK_USER_STONKS = 'userStonks' as const;
+export const BOOK_COMPANY_STONKS = 'companyStonks' as const;
+export const BOOK_USER_STONKS = 'userStonks' as const;
 
 const BOOKS = [
   BOOK_COMPANY_STONKS,
@@ -107,15 +107,17 @@ type MovementEntry =
   | TaskCompleteRewardMovementEntry
   | PayoutMovementEntry;
 
+export type BooksAggregate = {
+  [k in Book]: {
+    // totals
+    [INCREASE]: bigint;
+    [DECREASE]: bigint;
+  };
+};
+
 type Shelf = {
   entries: MovementEntry[];
-  books: {
-    [k in Book]: {
-      // totals
-      [INCREASE]: bigint;
-      [DECREASE]: bigint;
-    };
-  };
+  books: BooksAggregate;
 };
 
 // we're also lucky there are no transactions between users; Map will do
@@ -143,6 +145,7 @@ const emptyShelf = () =>
 const incDec = (b: Book, dc: DebCred) =>
   DEB_CRED_LINGO[ACCOUNT_TYPE_MAP[b]][dc];
 
+// make sure it takes from one book and puts to another according to accounting debit/credit rules
 const reflectEntry = (books: Shelf['books'], entry: MovementEntry) => ({
   ...books,
   [entry[DEBIT]]: {
@@ -157,7 +160,7 @@ const reflectEntry = (books: Shelf['books'], entry: MovementEntry) => ({
   },
 });
 
-export const penalty = (userId: UserId, taskId: TaskId, amount: bigint) => {
+export const penalty = (userId: UserId, taskId: TaskId, amount: bigint) => (tx: 'transaction todo') => {
   const shelf = db.get(userId) ?? emptyShelf();
   const debCred = {
     [DEBIT]: BOOK_USER_STONKS,
@@ -173,42 +176,57 @@ export const penalty = (userId: UserId, taskId: TaskId, amount: bigint) => {
       taskId,
     },
   };
+  const aggregate = reflectEntry(shelf.books, entry);
   db.set(userId, {
     entries: [...shelf.entries, entry],
-    books: reflectEntry(shelf.books, entry),
+    books: aggregate,
   });
+  return {
+    current: aggregate,
+    previous: shelf.books
+  };
 };
 
-export const reward = (userId: UserId, taskId: TaskId, amount: bigint) => {
+export const reward = (userId: UserId, taskId: TaskId, amount: bigint) => (tx: 'transaction todo') => {
   const shelf = db.get(userId) ?? emptyShelf();
   const entry: TaskCompleteRewardMovementEntry = {
-    debit: BOOK_COMPANY_STONKS,
-    credit: BOOK_USER_STONKS,
+    [DEBIT]: BOOK_COMPANY_STONKS,
+    [CREDIT]: BOOK_USER_STONKS,
     amount,
     date: new Date(),
     metadata: {
       taskId,
     },
   };
+  const aggregate = reflectEntry(shelf.books, entry);
   db.set(userId, {
     entries: [...shelf.entries, entry],
-    books: reflectEntry(shelf.books, entry),
+    books: aggregate,
   });
+  return {
+    current: aggregate,
+    previous: shelf.books
+  };
 };
 
-export const payout = (userId: UserId, amount: bigint) => {
+export const payout = (userId: UserId, amount: bigint) => (tx: 'transaction todo') => {
   const shelf = db.get(userId) ?? emptyShelf();
   const entry: PayoutMovementEntry = {
-    debit: BOOK_USER_STONKS,
-    credit: BOOK_MAGIC_REVENUE,
+    [DEBIT]: BOOK_USER_STONKS,
+    [CREDIT]: BOOK_MAGIC_REVENUE,
     amount,
     date: new Date(),
     metadata: {},
   };
+  const aggregate = reflectEntry(shelf.books, entry);
   db.set(userId, {
     entries: [...shelf.entries, entry],
-    books: reflectEntry(shelf.books, entry),
+    books: aggregate,
   });
+  return {
+    current: aggregate,
+    previous: shelf.books
+  };
 };
 
 // TODO non-negative in types...
@@ -221,7 +239,7 @@ export const getOutstandingPayout = (userId: UserId): bigint =>
     (x) => (x < BigInt(0) ? BigInt(0) : x)
   );
 
-export const getOutstandingPayouts = (): Record<UserId, bigint> =>
+export const getOutstandingPayouts = () => (tx: 'transaction todo'): Record<UserId, bigint> =>
   pipe(
     [...db.keys()],
     A.map((userId) => [userId, getOutstandingPayout(userId)] as const),

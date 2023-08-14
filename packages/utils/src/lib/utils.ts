@@ -40,5 +40,5 @@ export const uuidToNumberUnsafe = flow(
   bigintToNumberUnsafe
 );
 
-export const MonetaryAmount = S.number.pipe(S.int(), S.nonNegative());
+export const MonetaryAmount = S.number.pipe(S.int());
 export const MonetaryAmountPositive = MonetaryAmount.pipe(S.positive());

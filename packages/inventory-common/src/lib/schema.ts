@@ -1,6 +1,6 @@
 import * as S from '@effect/schema/Schema';
 import { UserId } from '@monorepo/kafka-users-common';
-import { MonetaryAmountPositive } from '@monorepo/utils';
+import { MonetaryAmount, MonetaryAmountPositive } from '@monorepo/utils';
 
 const TaskIdBrand = Symbol.for('TaskId');
 export const TaskId = S.UUID.pipe(S.brand(TaskIdBrand));
@@ -99,3 +99,26 @@ export const TaskEvent = S.union(
   TaskEventCreate
 );
 export type TaskEvent = S.To<typeof TaskEvent>;
+
+// TODO again, extra package needed here but no boilerplate until hw is done
+
+const UserAccountsCUDCommons = S.struct({
+  type: S.literal('UserAccountsCUD'),
+  version: VersionNumber, // no brand
+  userId: UserId,
+  timestamp: S.number.pipe(S.int(), S.nonNegative()),
+});
+
+export const UserAccountsStateCUDV1 = S.struct({
+  balance: MonetaryAmount,
+});
+
+export const UserAccountsCUDV1 = UserAccountsCUDCommons.pipe(S.extend(
+  S.struct({
+    previous: UserAccountsStateCUDV1,
+    current: UserAccountsStateCUDV1
+  })
+));
+
+export const UserAccountsCUD = S.union(UserAccountsCUDV1);
+export type UserAccountsCUD = S.To<typeof UserAccountsCUD>;

@@ -9,15 +9,17 @@ import { TaskEither } from 'fp-ts/TaskEither';
 // simulate "cron" with derp day counter
 const MS_IN_DAY = 1000 * 60 * 60 * 24;
 
-const report = (
+// TODO pull by notification task etc
+const payoutNotifyQueue: [UserId, bigint][] = [];
+
+const notify = (
   userId: UserId,
   amount: bigint
-): TaskEither<'reportError', void> => {
-  // pretend we have transactional outbox here; TODO
+) => (tx: 'transaction todo'): TaskEither<'reportError', void> => {
+  // pretend we have transactional outbox here;
   return TE.tryCatch(
     async () => {
-      await producer.connect();
-      // TODO producer.send() ...
+      payoutNotifyQueue.push([userId, amount]);
     },
     (e) => {
       console.error('report error', e);
@@ -31,9 +33,10 @@ const run_ = flow(
   getOutstandingPayouts,
   (o) => Object.entries(o),
   A.map(([userId, amount]) => {
-    // TODO pass transaction
-    payout(userId as UserId, amount);
-    return report(userId as UserId, amount);
+    const tx = 'transaction todo';
+    // really: queue payout in a separate account; then queue the payout event into kafka and handle it moving the 'queued' funds to 'paid out'
+    const aggregate = payout(userId as UserId, amount)(tx);
+    return notify(userId as UserId, amount)(tx);
   }),
   TE.sequenceArray,
   TE.map(constVoid)

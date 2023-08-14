@@ -1,39 +1,28 @@
-import express, { RequestHandler } from 'express';
-
-import * as fief from '@fief/fief';
-import * as fiefExpress from '@fief/fief/express';
+import express, { NextFunction } from 'express';
 import { Request, Response } from 'express-serve-static-core';
-import { FiefUserInfo } from '@fief/fief/src/client';
+import * as O from 'fp-ts/Option';
+import { isSome } from 'fp-ts/Option';
 import * as S from '@effect/schema/Schema';
-import { assertExists, assertNonEmptyAndAssigned } from '@monorepo/utils';
+import { assertExists } from '@monorepo/utils';
 import { apply, flow, pipe } from 'fp-ts/function';
 import { Kafka } from 'kafkajs';
 import {
   FiefUser,
+  KAFKA_BROKERS_ENV,
+  Role,
   ROLE_ADMIN,
   ROLE_MANAGER,
+  ROLE_WORKER,
   User,
   USER_TOPIC_NAME,
-  UserId,
+  UserId
 } from '@monorepo/kafka-users-common';
 import { users } from './user/db';
-import { isSome } from 'fp-ts/Option';
-import {
-  listen as listenReassign,
-  reassign as reassign_,
-} from './task/reassigner';
-import { get as getTask, set as setTask, listAssigned } from './task/db';
-import {
-  makeReportReassign,
-  REASSIGN_TOPIC_NAME,
-} from './task/reassigner/kafka';
+import { listen as listenReassign, reassign as reassign_ } from './task/reassigner';
+import { get as getTask, listAssigned, set as setTask } from './task/db';
+import { makeReportReassign, REASSIGN_TOPIC_NAME } from './task/reassigner/kafka';
 import { isLeft } from 'fp-ts/Either';
-import {
-  create as create_,
-  assign as assign_,
-  complete as complete_,
-  ReportTaskEvent,
-} from './task/fsm';
+import { assign as assign_, complete as complete_, create as create_, ReportTaskEvent } from './task/fsm';
 import { report as report_ } from './task/topic';
 import bodyParser from 'body-parser';
 import { shuffleStrategy } from './task/reassigner/strategy';
@@ -44,10 +33,10 @@ import {
   TASK_EVENT_COMPLETE,
   TASK_EVENT_CREATE,
   TaskEvent,
-  TaskId,
+  TaskId
 } from '@monorepo/inventory-common/schema';
-import { KAFKA_BROKERS_ENV } from '@monorepo/kafka-users-common';
 import { TASK_EVENTS_TOPIC_NAME } from '../../kafka-users-common/src/lib/topics';
+import { makeAuthMiddleware, useCanRole } from '../../utils/src/lib/auth';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
@@ -55,83 +44,7 @@ const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 const app = express();
 app.use(bodyParser.json());
 
-const SESSION_COOKIE_NAME = 'user_session';
-const REDIRECT_URI = `http://localhost:${port}/auth-callback`;
-
-class MemoryUserInfoCache<Id extends string, T> {
-  storage: Record<Id, T>;
-  constructor() {
-    this.storage = {} as Record<Id, T>;
-  }
-
-  async get(id: Id): Promise<T | null> {
-    const userinfo = this.storage[id];
-    if (userinfo) {
-      return userinfo;
-    }
-    return null;
-  }
-
-  async set(id: Id, userinfo: T) {
-    this.storage[id] = userinfo;
-  }
-
-  async remove(id: Id) {
-    delete this.storage[id];
-  }
-
-  async clear() {
-    this.storage = {} as Record<Id, T>;
-  }
-}
-
-type UserInfoCacheId = string;
-
-const userInfoCache = new MemoryUserInfoCache<UserInfoCacheId, FiefUserInfo>();
-
-const OAUTH_BASE_URL = assertNonEmptyAndAssigned(
-  process.env.OAUTH_BASE_URL || 'http://localhost:8000'
-);
-
-const fiefClient = new fief.Fief({
-  baseURL: OAUTH_BASE_URL,
-  clientId: 'GNggKmhPlgowVLktPFRRgiAbOh1JfyY0POXmvIa5kE4',
-  clientSecret: 'dp6H8D1gPmdEA4gxd7izO0KDAp9JAbgQswxwTdGQrQo',
-});
-
-const unauthorizedResponse = async (req: Request, res: Response) => {
-  const authURL = await fiefClient.getAuthURL({
-    redirectURI: REDIRECT_URI,
-    scope: ['openid'],
-  });
-  res.redirect(307, authURL);
-};
-
-const fiefAuthMiddleware = fiefExpress.createMiddleware({
-  client: fiefClient,
-  tokenGetter: fiefExpress.cookieGetter(SESSION_COOKIE_NAME),
-  unauthorizedResponse,
-  userInfoCache,
-});
-
-const AuthCallbackCodeBrand = Symbol.for('AuthCallbackCode');
-const AuthCallbackCode = S.string.pipe(S.brand(AuthCallbackCodeBrand));
-type AuthCallbackCode = S.To<typeof AuthCallbackCode>;
-
-app.get('/auth-callback', async (req, res) => {
-  const code = S.parseSync(AuthCallbackCode)(req.query['code']);
-  const [tokens, userinfo] = await fiefClient.authCallback(code, REDIRECT_URI);
-
-  // TODO save userinfo just like it came from kafka
-  void userInfoCache.set(userinfo.sub, userinfo);
-
-  res.cookie(SESSION_COOKIE_NAME, tokens.access_token, {
-    maxAge: tokens.expires_in * 1000,
-    httpOnly: true,
-    secure: false,
-  });
-  res.redirect('/protected');
-});
+const fiefAuthMiddleware = makeAuthMiddleware(app, port);
 
 app.get('/protected', fiefAuthMiddleware(), (req, res) => {
   res.send(
@@ -144,14 +57,6 @@ app.get('/protected', fiefAuthMiddleware(), (req, res) => {
 app.get('/authenticated', fiefAuthMiddleware(), (req, res) => {
   res.json(req.accessTokenInfo);
 });
-
-app.get(
-  '/authenticated-scope',
-  fiefAuthMiddleware({ scope: ['openid', 'required_scope'] }),
-  (req, res) => {
-    res.json(req.accessTokenInfo);
-  }
-);
 
 app.get(
   '/authenticated-permissions',
@@ -181,19 +86,8 @@ const reassign = pipe(
 );
 
 // reassign
-app.post('/shuffle', fiefAuthMiddleware(), async (req, res) => {
-  const can = pipe(
-    req.user,
-    assertExists,
-    S.parseSync(FiefUser),
-    (u) => u.fields.role,
-    S.parseOption(Shuffler),
-    isSome
-  );
-  if (!can) {
-    res.status(403).send('Forbidden');
-    return;
-  }
+app.post('/shuffle', fiefAuthMiddleware(), useCanRole(SHUFFLERS), async (req, res) => {
+
   const r = await reassign();
   if (isLeft(r)) {
     console.error('error reassigning', r.left);
@@ -219,8 +113,7 @@ const CreateBody = S.struct({
   description: S.string.pipe(S.nonEmpty()),
 });
 
-app.post('/create', fiefAuthMiddleware(), async (req, res) => {
-  const _user = assertExists(req.user); // never trust myself
+app.post('/create', fiefAuthMiddleware(), useCanRole(['any']), async (req, res) => {
   const body = S.parseSync(CreateBody)(req.body);
   const r = await create(body.title, body.jiraId, body.description)();
   if (isLeft(r)) {
@@ -235,19 +128,7 @@ app.post('/create', fiefAuthMiddleware(), async (req, res) => {
 
 const assign = flow(assign_, apply(deps));
 
-app.post('/assign/:id', fiefAuthMiddleware(), async (req, res) => {
-  const can = pipe(
-    req.user,
-    assertExists,
-    S.parseSync(FiefUser),
-    (u) => u.fields.role,
-    S.parseOption(Shuffler),
-    isSome
-  );
-  if (!can) {
-    res.status(403).send('Forbidden');
-    return;
-  }
+app.post('/assign/:id', fiefAuthMiddleware(), useCanRole(SHUFFLERS), async (req, res) => {
   const id = S.parseSync(TaskId)(req.params.id);
   const [assignee, finalize] = shuffleStrategy();
   const r = await assign(id, assignee.id)();
@@ -264,7 +145,7 @@ app.post('/assign/:id', fiefAuthMiddleware(), async (req, res) => {
 
 const complete = flow(complete_, apply(deps));
 
-app.post('/complete/:id', fiefAuthMiddleware(), async (req, res) => {
+app.post('/complete/:id', fiefAuthMiddleware(), useCanRole([ROLE_WORKER]), async (req, res) => {
   const id = pipe(req.user, assertExists, S.parseSync(FiefUser), (u) => u.sub);
   const taskId = S.parseSync(TaskId)(req.params.id);
   const r = await complete(id, taskId)();

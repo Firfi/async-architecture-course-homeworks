@@ -1,12 +1,11 @@
 import { FiefUserInfo } from '@fief/fief/src/client';
-import { assertExists, assertNonEmptyAndAssigned } from '@monorepo/utils';
+import { assertExists, assertNonEmptyAndAssigned, FiefUser, Role } from '@monorepo/utils';
 import * as fief from '@fief/fief';
 import { Request, Response } from 'express-serve-static-core';
 import * as fiefExpress from '@fief/fief/express';
 import * as S from '@effect/schema/Schema';
 import { Express, NextFunction } from 'express';
 import { ReadonlyNonEmptyArray } from 'fp-ts/ReadonlyNonEmptyArray';
-import { FiefUser, Role } from '@monorepo/kafka-users-common';
 import { pipe } from 'fp-ts/function';
 import * as O from 'fp-ts/Option';
 import { isSome } from 'fp-ts/Option';

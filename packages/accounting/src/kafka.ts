@@ -1,8 +1,9 @@
 import { Kafka } from 'kafkajs';
-import { KAFKA_BROKERS_ENV, UserId } from '@monorepo/kafka-users-common';
+import { KAFKA_BROKERS_ENV } from '@monorepo/kafka-users-common';
 import { BOOK_COMPANY_STONKS, BOOK_USER_STONKS, BooksAggregate } from './db';
-import { UserAccountsCUD } from '@monorepo/inventory-common/schema';
+import { UserAccountsCUD } from '@monorepo/taskos-common/schema';
 import { ACCOUNTING_TOPIC_NAME } from '../../kafka-users-common/src/lib/topics';
+import { UserId } from '@monorepo/utils';
 
 export const kafka = new Kafka({
   clientId: 'accounting',

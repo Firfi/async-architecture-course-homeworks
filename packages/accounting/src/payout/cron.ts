@@ -1,10 +1,10 @@
 import { getOutstandingPayouts, payout } from '../db';
 import { constVoid, flow, pipe } from 'fp-ts/function';
 import * as A from 'fp-ts/Array';
-import { UserId } from '@monorepo/kafka-users-common';
 import { producer } from '../kafka';
 import * as TE from 'fp-ts/TaskEither';
 import { TaskEither } from 'fp-ts/TaskEither';
+import { UserId } from '@monorepo/utils';
 
 // simulate "cron" with derp day counter
 const MS_IN_DAY = 1000 * 60 * 60 * 24;

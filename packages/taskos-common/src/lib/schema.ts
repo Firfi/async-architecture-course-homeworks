@@ -1,6 +1,5 @@
 import * as S from '@effect/schema/Schema';
-import { UserId } from '@monorepo/kafka-users-common';
-import { MonetaryAmount, MonetaryAmountPositive } from '@monorepo/utils';
+import { MonetaryAmount, MonetaryAmountPositive, UserId } from '@monorepo/utils';
 
 const TaskIdBrand = Symbol.for('TaskId');
 export const TaskId = S.UUID.pipe(S.brand(TaskIdBrand));

@@ -6,7 +6,7 @@ import {
   TASK_EVENT_ASSIGN,
   TASK_EVENT_COMPLETE,
   TaskEvent, UserAccountsCUD
-} from '@monorepo/inventory-common/schema';
+} from '@monorepo/taskos-common/schema';
 import { match } from 'ts-pattern';
 import { onPrice as reportPrice, onUserBalance } from './ticker';
 import { consumer } from './kafka';

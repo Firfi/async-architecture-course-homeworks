@@ -1,11 +1,11 @@
 /* eslint-disable */
 export default {
-  displayName: 'inventory-common',
+  displayName: 'taskos-common',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: '../../coverage/packages/inventory-common',
+  coverageDirectory: '../../coverage/packages/taskos-common',
 };

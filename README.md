@@ -4,11 +4,17 @@
 
 Run docker-compose.
 
-Run `npx nx serve inventory` to start inventory service // TODO dependency build instructions
+# Demo:
+
+`docker-compose up`
+
+# Development:
+
+Run `npx nx serve taskos` to start taskos service // TODO dependency build instructions
 
 No env needed.
 
-Ports needed on host machine: 3000, 3001, 8000
+Ports needed on host machine: 3000, 3001, 3002, 3003, 8000
 
 Go to http://localhost:8000/admin , un / pass: admin@popug.io / admin@popug.io
 

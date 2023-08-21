@@ -1,4 +1,4 @@
-import { UserId } from '@monorepo/kafka-users-common';
+import { UserId } from '@monorepo/utils';
 
 const startOfTheDay = (d: Date) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate());

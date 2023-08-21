@@ -1,7 +1,7 @@
-import { UserId } from '@monorepo/kafka-users-common';
-import { TaskId } from '@monorepo/inventory-common/schema';
+import { TaskId } from '@monorepo/taskos-common/schema';
 import { pipe } from 'fp-ts/function';
 import * as A from 'fp-ts/Array';
+import { UserId } from '@monorepo/utils';
 
 const BOOK_MAGIC_REVENUE = 'magicRevenue' as const;
 export const BOOK_COMPANY_STONKS = 'companyStonks' as const;

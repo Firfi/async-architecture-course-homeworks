@@ -5,13 +5,11 @@ import * as S from '@effect/schema/Schema';
 import { Kafka } from 'kafkajs';
 import { Request } from 'express-serve-static-core';
 import {
-  FiefUserFields,
-  Role,
-  User,
   USER_TOPIC_NAME,
-  UserId,
+
 } from '@monorepo/kafka-users-common';
 import { KAFKA_BROKERS_ENV } from '@monorepo/kafka-users-common';
+import { FiefUserFields, Role, User, UserId } from '@monorepo/utils';
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;

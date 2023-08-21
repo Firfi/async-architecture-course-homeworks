@@ -4,7 +4,7 @@ import { pipe } from 'fp-ts/function';
 import {
   TASK_EVENT_CURRENT_VERSIONS,
   TaskEvent,
-} from '@monorepo/inventory-common/schema';
+} from '@monorepo/taskos-common/schema';
 import { TASK_EVENTS_TOPIC_NAME } from '../../../kafka-users-common/src/lib/topics';
 
 export type TaskReportError = 'TaskReportError';

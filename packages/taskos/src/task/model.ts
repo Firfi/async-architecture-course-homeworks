@@ -1,11 +1,10 @@
 import * as S from '@effect/schema/Schema';
-import { UserId } from '@monorepo/kafka-users-common';
 import {
   TASK_EVENT_ASSIGN,
   TASK_EVENT_COMPLETE,
   TaskId,
-} from '@monorepo/inventory-common/schema';
-import { MonetaryAmountPositive } from '@monorepo/utils';
+} from '@monorepo/taskos-common/schema';
+import { MonetaryAmountPositive, UserId } from '@monorepo/utils';
 
 export const TASK_STATE_NEW = 'new' as const;
 export const TASK_STATE_ASSIGNED = 'assigned' as const;

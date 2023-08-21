@@ -1,6 +1,30 @@
 version: '3'
 
 services:
+  taskos:
+    build:
+      context: .
+      dockerfile: taskos.Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+  accounting:
+    build:
+      context: .
+      dockerfile: accounting.Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+  analytics:
+    build:
+      context: .
+      dockerfile: analytics.Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
   auth-kafka-adapter:
     depends_on:
       fiefsetup:

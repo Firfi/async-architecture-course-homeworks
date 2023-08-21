@@ -1,7 +1,7 @@
 {
-  "name": "inventory",
+  "name": "taskos",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/inventory/src",
+  "sourceRoot": "packages/taskos/src",
   "projectType": "application",
   "targets": {
     "build": {
@@ -10,12 +10,12 @@
       "defaultConfiguration": "production",
       "options": {
         "platform": "node",
-        "outputPath": "dist/packages/inventory",
+        "outputPath": "dist/packages/taskos",
         "format": ["cjs"],
         "bundle": false,
-        "main": "packages/inventory/src/main.ts",
-        "tsConfig": "packages/inventory/tsconfig.app.json",
-        "assets": ["packages/inventory/src/assets"],
+        "main": "packages/taskos/src/main.ts",
+        "tsConfig": "packages/taskos/tsconfig.app.json",
+        "assets": ["packages/taskos/src/assets"],
         "generatePackageJson": true,
         "esbuildOptions": {
           "sourcemap": true,
@@ -40,14 +40,14 @@
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
       "options": {
-        "buildTarget": "inventory:build"
+        "buildTarget": "taskos:build"
       },
       "configurations": {
         "development": {
-          "buildTarget": "inventory:build:development"
+          "buildTarget": "taskos:build:development"
         },
         "production": {
-          "buildTarget": "inventory:build:production"
+          "buildTarget": "taskos:build:production"
         }
       }
     },
@@ -55,14 +55,14 @@
       "executor": "@nx/linter:eslint",
       "outputs": ["{options.outputFile}"],
       "options": {
-        "lintFilePatterns": ["packages/inventory/**/*.ts"]
+        "lintFilePatterns": ["packages/taskos/**/*.ts"]
       }
     },
     "test": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
       "options": {
-        "jestConfig": "packages/inventory/jest.config.ts",
+        "jestConfig": "packages/taskos/jest.config.ts",
         "passWithNoTests": true
       },
       "configurations": {

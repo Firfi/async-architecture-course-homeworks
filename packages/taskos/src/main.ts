@@ -3,19 +3,12 @@ import { Request, Response } from 'express-serve-static-core';
 import * as O from 'fp-ts/Option';
 import { isSome } from 'fp-ts/Option';
 import * as S from '@effect/schema/Schema';
-import { assertExists } from '@monorepo/utils';
+import { assertExists, FiefUser, Role, ROLE_ADMIN, ROLE_MANAGER, ROLE_WORKER, User, UserId } from '@monorepo/utils';
 import { apply, flow, pipe } from 'fp-ts/function';
 import { Kafka } from 'kafkajs';
 import {
-  FiefUser,
   KAFKA_BROKERS_ENV,
-  Role,
-  ROLE_ADMIN,
-  ROLE_MANAGER,
-  ROLE_WORKER,
-  User,
-  USER_TOPIC_NAME,
-  UserId
+  USER_TOPIC_NAME
 } from '@monorepo/kafka-users-common';
 import { users } from './user/db';
 import { listen as listenReassign, reassign as reassign_ } from './task/reassigner';
@@ -34,7 +27,7 @@ import {
   TASK_EVENT_CREATE,
   TaskEvent,
   TaskId
-} from '@monorepo/inventory-common/schema';
+} from '@monorepo/taskos-common/schema';
 import { TASK_EVENTS_TOPIC_NAME } from '../../kafka-users-common/src/lib/topics';
 import { makeAuthMiddleware, useCanRole } from '../../utils/src/lib/auth';
 
@@ -70,7 +63,7 @@ export const Shuffler = S.literal(...SHUFFLERS);
 export type Shuffler = S.To<typeof Shuffler>;
 
 const kafka = new Kafka({
-  clientId: 'inventory',
+  clientId: 'taskos',
   brokers: [...KAFKA_BROKERS_ENV],
 });
 
@@ -159,7 +152,7 @@ app.post('/complete/:id', fiefAuthMiddleware(), useCanRole([ROLE_WORKER]), async
   }
 });
 
-const consumer = kafka.consumer({ groupId: 'inventory' });
+const consumer = kafka.consumer({ groupId: 'taskos' });
 
 app.listen(port, host, async () => {
   console.log(`[ ready ] http://${host}:${port}`);

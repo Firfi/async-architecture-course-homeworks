@@ -21,7 +21,7 @@
 
 2. Клиенты читают и парсят версию 1; мы пишем схему версии 2 и добавляем её в discriminated union
 
-`export const TaskEventCreate = S.union(TaskEventCreateV1, TaskEventCreateV2);` [ref](../../packages/inventory-common/src/lib/schema.ts)
+`export const TaskEventCreate = S.union(TaskEventCreateV1, TaskEventCreateV2);` [ref](../../packages/taskos-common/src/lib/schema.ts)
 
 3. Клиенты перестают компилиться; от компилятора мы знаем каждое место, где используется Union `TaskEventCreate`
 

@@ -3,7 +3,8 @@ import bodyParser from 'body-parser';
 import { run as runReactions } from './reactions';
 import { getMaxPriceForInterval, getTopRevenueToday, loserCountToday } from './ticker';
 import { makeAuthMiddleware, useCanRole } from '../../utils/src/lib/auth';
-import { ROLE_ADMIN } from '@monorepo/kafka-users-common';
+
+import { ROLE_ADMIN } from '@monorepo/utils';
 
 const app = express();
 

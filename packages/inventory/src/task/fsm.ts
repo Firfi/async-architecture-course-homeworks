@@ -10,11 +10,9 @@ import * as Reader from 'fp-ts/Reader';
 import { Either } from 'fp-ts/Either';
 import { v4 } from 'uuid';
 import prand, { uniformIntDistribution } from 'pure-rand';
-import { flow, pipe } from 'fp-ts/function';
+import { flow, pipe, tupled } from 'fp-ts/function';
 import {
   tasksStorage,
-  get as getFromDb,
-  set as setInDb,
   DbWriteError,
   TaskDbReadError,
   GetTask,
@@ -28,34 +26,31 @@ import {
   CompletedTask,
   NewTask,
   Task,
-  TASK_EVENT_ASSIGN,
-  TASK_EVENT_COMPLETE,
-  TASK_EVENT_CREATE,
   TASK_STATE_ASSIGNED,
   TASK_STATE_COMPLETED,
   TASK_STATE_NEW,
+} from './model';
+import { some } from 'fp-ts/Option';
+import { apply } from 'fp-ts/function';
+import { ReaderTaskEither } from 'fp-ts/ReaderTaskEither';
+import { TaskReportError } from './topic';
+import { uuidToNumberUnsafe } from '@monorepo/utils';
+import { RandomGenerator } from 'pure-rand/lib/types/generator/RandomGenerator';
+import { State } from 'fp-ts/State';
+import * as ST from 'fp-ts/State';
+import * as IO from 'fp-ts/IO';
+import {
+  JiraId,
+  TASK_EVENT_ASSIGN,
+  TASK_EVENT_COMPLETE,
+  TASK_EVENT_CREATE,
+  TASK_EVENT_CURRENT_VERSIONS,
   TaskEvent,
   TaskEventAssign,
   TaskEventComplete,
   TaskEventCreate,
   TaskId,
-  WithId,
-} from './model';
-import { Option, some } from 'fp-ts/Option';
-import { apply } from 'fp-ts/function';
-import {
-  chainFirstTaskEitherKW,
-  ReaderTaskEither,
-} from 'fp-ts/ReaderTaskEither';
-import { TaskReportError } from './topic';
-import { uuidToNumberUnsafe } from '@monorepo/utils';
-import { RandomGenerator } from 'pure-rand/lib/types/generator/RandomGenerator';
-import { Writer } from 'fp-ts/Writer';
-import * as W from 'fp-ts/Writer';
-import { State } from 'fp-ts/State';
-import * as ST from 'fp-ts/State';
-import { swap } from 'fp-ts/Tuple';
-import * as IO from 'fp-ts/IO';
+} from '@monorepo/inventory-common/schema';
 
 export type AlreadyExistsError = 'AlreadyExistsError';
 export type WriteNewError = DbWriteError | AlreadyExistsError | TaskDbReadError;
@@ -78,6 +73,7 @@ const writeNewTask = (
               state: TASK_STATE_NEW,
               description: e.description,
               id: e.taskId,
+              price: e.price,
             } satisfies NewTask;
             return pipe(
               t,
@@ -99,16 +95,24 @@ type CreateError = WriteNewError | SendCreateEventError;
 
 const initTaskCreateEvent = (
   title: string,
-  description: string,
+  jiraId: JiraId,
+  description: string
 ): TaskEventCreate =>
-  pipe(S.parseSync(TaskId)(v4()), flow(id => pipe(id, makeTaskCreatePrice, price => ({
-    taskId: id,
-    price: Number(price),
-    type: TASK_EVENT_CREATE,
-    title,
-    description,
-    timestamp: Date.now(),
-  }))))
+  pipe(
+    S.parseSync(TaskId)(v4()),
+    flow((id) =>
+      pipe(id, makeTaskCreatePrice, (price) => ({
+        taskId: id,
+        price: Number(price),
+        type: TASK_EVENT_CREATE,
+        title,
+        jiraId,
+        description,
+        timestamp: Date.now(),
+        version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE],
+      }))
+    )
+  );
 
 // bigints cause js has no ints
 const ASSIGN_PRICE_MIN = BigInt(10);
@@ -145,6 +149,7 @@ const makeTaskCompleteReward = makeTaskPrice(
 // TODO actor?
 export const create = (
   title: string,
+  jiraId: JiraId,
   description: string
 ): RTE.ReaderTaskEither<
   { get: GetTask; set: SetTask; report: ReportTaskEvent },
@@ -152,7 +157,8 @@ export const create = (
   NewTask
 > =>
   pipe(
-    initTaskCreateEvent(title, description),
+    [title, jiraId, description],
+    tupled(initTaskCreateEvent),
     sendTaskEvent /* TODO don't care if writeNewTask fails afterwards */,
     RTE.chainW(writeNewTask)
   );
@@ -217,12 +223,14 @@ const assertTaskAssignable = (
 
 const makeTaskAssignEvent =
   (assignee: UserId) =>
-  (taskId: TaskId): TaskEventAssign => ({
+  (taskId: TaskId, currentPrice: number): TaskEventAssign => ({
     type: TASK_EVENT_ASSIGN,
     taskId,
     assignee,
     timestamp: Date.now(),
-  })
+    version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_ASSIGN],
+    price: currentPrice,
+  });
 
 // TODO actor?
 export const assign =
@@ -244,12 +252,14 @@ export const assign =
           flow(
             assertTaskAssignable,
             TE.fromEither,
-            TE.chainW((t) => pipe(
-              makeTaskAssignEvent(assignee)(t.id),
-              sendTaskEvent,
-              apply(deps),
-              TE.map((e) => ({ e, t }))
-            )) /*don't care about write past this point*/,
+            TE.chainW((t) =>
+              pipe(
+                makeTaskAssignEvent(assignee)(t.id, t.price),
+                sendTaskEvent,
+                apply(deps),
+                TE.map((e) => ({ e, t }))
+              )
+            ) /*don't care about write past this point*/,
             TE.chainW(({ e, t }) =>
               pipe(
                 e,
@@ -368,16 +378,18 @@ const assertCanComplete =
     return E.left('TaskCompletePermissionError' as const);
   };
 
-const makeTaskCompleteEvent = (taskId: TaskId): TaskEventComplete =>
-  pipe(
-    makeTaskCompleteReward(taskId),
-    reward => ({
-      type: TASK_EVENT_COMPLETE,
-      taskId,
-      timestamp: Date.now(),
-      reward: Number(reward),
-    })
-  );
+const makeTaskCompleteEvent = (
+  taskId: TaskId,
+  userId: UserId
+): TaskEventComplete =>
+  pipe(makeTaskCompleteReward(taskId), (reward) => ({
+    type: TASK_EVENT_COMPLETE,
+    taskId,
+    userId,
+    timestamp: Date.now(),
+    reward: Number(reward),
+    version: TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_COMPLETE],
+  }));
 
 export const complete =
   (
@@ -399,13 +411,15 @@ export const complete =
             assertTaskCompletable,
             E.chainW(assertCanComplete(actor)),
             TE.fromEither,
-            TE.chainW((t: CompletableTask) => pipe(
-              t.id,
-              makeTaskCompleteEvent,
-              sendTaskEvent,
-              apply(deps),
-              TE.map((e) => ({ e, t }))
-            )) /*don't care about write past this point*/,
+            TE.chainW((t: CompletableTask) =>
+              pipe(
+                [t.id, actor],
+                tupled(makeTaskCompleteEvent),
+                sendTaskEvent,
+                apply(deps),
+                TE.map((e) => ({ e, t }))
+              )
+            ) /*don't care about write past this point*/,
             TE.chainW(({ e, t }) =>
               pipe(
                 writeCompletedTask(e),

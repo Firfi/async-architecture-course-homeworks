@@ -1,7 +1,7 @@
 import * as S from '@effect/schema/Schema';
-import { TaskId } from '../model';
 import { Producer } from 'kafkajs';
 import * as TE from 'fp-ts/TaskEither';
+import { TaskId } from '@monorepo/inventory-common/schema';
 
 export const ReassignEvent = S.struct({
   taskId: TaskId,

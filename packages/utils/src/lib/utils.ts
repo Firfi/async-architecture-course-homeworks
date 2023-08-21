@@ -1,5 +1,6 @@
 import { Option } from 'fp-ts/Option';
 import { flow } from 'fp-ts/function';
+import * as S from '@effect/schema/Schema';
 
 export const assertExists = <T>(x: T): Exclude<T, null | undefined> =>
   x === null || x === undefined
@@ -38,3 +39,6 @@ export const uuidToNumberUnsafe = flow(
   hexToBigintUnsafe,
   bigintToNumberUnsafe
 );
+
+export const MonetaryAmount = S.number.pipe(S.int());
+export const MonetaryAmountPositive = MonetaryAmount.pipe(S.positive());

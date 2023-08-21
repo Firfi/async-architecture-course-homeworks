@@ -117,7 +117,11 @@ services:
           -H "Content-Type: application/json" \
           -d '{
             "redirect_uris": [
-              "http://localhost:3001/auth-callback"
+              "http://localhost:3001/auth-callback",
+              "http://localhost:3002/auth-callback",
+              "http://localhost:3003/auth-callback",
+              "http://localhost:3004/auth-callback",
+              "http://etc"
             ]
           }' \
            && echo "\n"

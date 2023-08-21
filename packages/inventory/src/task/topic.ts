@@ -1,9 +1,11 @@
-import { TaskEvent } from './model';
 import { Producer } from 'kafkajs';
 import * as TE from 'fp-ts/TaskEither';
 import { pipe } from 'fp-ts/function';
-
-export const TASK_EVENTS_TOPIC_NAME = 'task-events'; // not CUD
+import {
+  TASK_EVENT_CURRENT_VERSIONS,
+  TaskEvent,
+} from '@monorepo/inventory-common/schema';
+import { TASK_EVENTS_TOPIC_NAME } from '../../../kafka-users-common/src/lib/topics';
 
 export type TaskReportError = 'TaskReportError';
 
@@ -11,6 +13,14 @@ export const report = (producer: Producer) => (e: TaskEvent) =>
   pipe(
     TE.tryCatch(
       async () => {
+        // TODO compile-time
+        if (e.version !== TASK_EVENT_CURRENT_VERSIONS[e.type]) {
+          throw new Error(
+            `TaskEvent version mismatch. Expected ${
+              TASK_EVENT_CURRENT_VERSIONS[e.type]
+            } but got ${e.version}`
+          );
+        }
         await producer.send({
           topic: TASK_EVENTS_TOPIC_NAME,
           messages: [

@@ -1,0 +1,77 @@
+{
+  "name": "analytics-dashboard",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/analytics-dashboard/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "platform": "node",
+        "outputPath": "dist/packages/analytics-dashboard",
+        "format": ["cjs"],
+        "bundle": false,
+        "main": "packages/analytics-dashboard/src/main.ts",
+        "tsConfig": "packages/analytics-dashboard/tsconfig.app.json",
+        "assets": ["packages/analytics-dashboard/src/assets"],
+        "generatePackageJson": true,
+        "esbuildOptions": {
+          "sourcemap": true,
+          "outExtension": {
+            ".js": ".js"
+          }
+        }
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "esbuildOptions": {
+            "sourcemap": false,
+            "outExtension": {
+              ".js": ".js"
+            }
+          }
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "analytics-dashboard:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "analytics-dashboard:build:development"
+        },
+        "production": {
+          "buildTarget": "analytics-dashboard:build:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/linter:eslint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["packages/analytics-dashboard/**/*.ts"]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "packages/analytics-dashboard/jest.config.ts",
+        "passWithNoTests": true
+      },
+      "configurations": {
+        "ci": {
+          "ci": true,
+          "codeCoverage": true
+        }
+      }
+    }
+  },
+  "tags": []
+}

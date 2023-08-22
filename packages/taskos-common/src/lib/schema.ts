@@ -31,17 +31,15 @@ export type VersionNumber = S.To<typeof VersionNumber>;
 export const TaskEventCommons = S.struct({
   taskId: TaskId,
   timestamp: S.number.pipe(S.int(), S.nonNegative()),
-  version: VersionNumber, // no brand
+  // version: VersionNumber, // no brand
 });
 
 export const TaskEventCreateV1 = TaskEventCommons.pipe(
   S.extend(
     S.struct({
-      type: S.literal(TASK_EVENT_CREATE),
       price: MonetaryAmountPositive,
       title: S.string,
       description: S.string,
-      version: S.literal(1),
     })
   )
 );
@@ -55,17 +53,19 @@ export const tryJiraId = S.parseOption(JiraId);
 export const TaskEventCreateV2 = TaskEventCommons.pipe(
   S.extend(
     S.struct({
-      type: S.literal(TASK_EVENT_CREATE),
       price: MonetaryAmountPositive,
       // no [ or ] in title
       title: S.string.pipe(S.pattern(/^[^\[\]]+$/)),
       description: S.string,
       jiraId: JiraId,
-      version: S.literal(TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE]),
+
     })
   )
 );
-export const TaskEventCreate = S.union(TaskEventCreateV1, TaskEventCreateV2);
+export const TaskEventCreate =
+  S.union(TaskEventCreateV1.pipe(S.attachPropertySignature("version", 1)), TaskEventCreateV2.pipe(S.attachPropertySignature("version", TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE]))).pipe(S.extend(S.struct({
+    type: S.literal(TASK_EVENT_CREATE),
+  })));
 export type TaskEventCreate = S.To<typeof TaskEventCreate>;
 
 export const TaskEventAssignV1 = TaskEventCommons.pipe(
@@ -73,24 +73,22 @@ export const TaskEventAssignV1 = TaskEventCommons.pipe(
     S.struct({
       type: S.literal(TASK_EVENT_ASSIGN),
       assignee: UserId,
-      version: S.literal(CURRENT_TASK_EVENT_ASSIGN_VERSION),
       price: MonetaryAmountPositive,
     })
   )
 );
-export const TaskEventAssign = S.union(TaskEventAssignV1);
+export const TaskEventAssign = TaskEventAssignV1.pipe(S.attachPropertySignature("version", CURRENT_TASK_EVENT_ASSIGN_VERSION)) // S.union(TaskEventAssignV1);
 export type TaskEventAssign = S.To<typeof TaskEventAssign>;
 export const TaskEventCompleteV1 = TaskEventCommons.pipe(
   S.extend(
     S.struct({
       type: S.literal(TASK_EVENT_COMPLETE),
       reward: MonetaryAmountPositive,
-      version: S.literal(CURRENT_TASK_EVENT_COMPLETE_VERSION),
       userId: UserId,
     })
   )
 );
-export const TaskEventComplete = S.union(TaskEventCompleteV1);
+export const TaskEventComplete = TaskEventCompleteV1.pipe(S.attachPropertySignature("version", CURRENT_TASK_EVENT_COMPLETE_VERSION,)) // S.union(TaskEventCompleteV1);
 export type TaskEventComplete = S.To<typeof TaskEventComplete>;
 export const TaskEvent = S.union(
   TaskEventAssign,
@@ -103,7 +101,7 @@ export type TaskEvent = S.To<typeof TaskEvent>;
 
 const UserAccountsCUDCommons = S.struct({
   type: S.literal('UserAccountsCUD'),
-  version: VersionNumber, // no brand
+  // version: VersionNumber, // no brand
   userId: UserId,
   timestamp: S.number.pipe(S.int(), S.nonNegative()),
 });

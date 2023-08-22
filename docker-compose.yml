@@ -9,6 +9,10 @@ services:
       - "3001:3001"
     environment:
       PORT: 3001
+      KAFKA_BROKERS: localhost:9094
+      OAUTH_BASE_URL: http://localhost:8000
+    depends_on:
+      - kafka
   accounting:
     build:
       context: .
@@ -17,6 +21,8 @@ services:
       - "3002:3002"
     environment:
       PORT: 3002
+    depends_on:
+      - kafka
   analytics:
     build:
       context: .
@@ -25,9 +31,13 @@ services:
       - "3003:3003"
     environment:
       PORT: 3003
+    depends_on:
+      - kafka
   auth-kafka-adapter:
     depends_on:
       fiefsetup:
+        condition: service_started
+      kafka:
         condition: service_started
     build:
       context: .

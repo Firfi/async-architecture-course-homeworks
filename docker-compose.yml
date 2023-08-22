@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: taskos.Dockerfile
     ports:
-      - "3001:3001"
+      - '3001:3001'
     environment:
       PORT: 3001
       KAFKA_BROKERS: kafka:9092
@@ -18,7 +18,7 @@ services:
       context: .
       dockerfile: accounting.Dockerfile
     ports:
-      - "3002:3002"
+      - '3002:3002'
     environment:
       PORT: 3002
       KAFKA_BROKERS: kafka:9092
@@ -30,7 +30,7 @@ services:
       context: .
       dockerfile: analytics.Dockerfile
     ports:
-      - "3003:3003"
+      - '3003:3003'
     environment:
       PORT: 3003
       KAFKA_BROKERS: kafka:9092

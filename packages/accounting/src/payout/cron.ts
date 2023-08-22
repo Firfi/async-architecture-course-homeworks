@@ -12,21 +12,20 @@ const MS_IN_DAY = 1000 * 60 * 60 * 24;
 // TODO pull by notification task etc
 const payoutNotifyQueue: [UserId, bigint][] = [];
 
-const notify = (
-  userId: UserId,
-  amount: bigint
-) => (tx: 'transaction todo'): TaskEither<'reportError', void> => {
-  // pretend we have transactional outbox here;
-  return TE.tryCatch(
-    async () => {
-      payoutNotifyQueue.push([userId, amount]);
-    },
-    (e) => {
-      console.error('report error', e);
-      return 'reportError';
-    }
-  );
-};
+const notify =
+  (userId: UserId, amount: bigint) =>
+  (tx: 'transaction todo'): TaskEither<'reportError', void> => {
+    // pretend we have transactional outbox here;
+    return TE.tryCatch(
+      async () => {
+        payoutNotifyQueue.push([userId, amount]);
+      },
+      (e) => {
+        console.error('report error', e);
+        return 'reportError';
+      }
+    );
+  };
 
 // TODO "running" state, idempotency key and all that
 const run_ = flow(

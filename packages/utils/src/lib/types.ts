@@ -8,7 +8,7 @@ export const ROLES = [
   ROLE_WORKER,
   ROLE_ADMIN,
   ROLE_MANAGER,
-  ROLE_ACCOUNTANT
+  ROLE_ACCOUNTANT,
 ] as const;
 export const Role = S.literal(...ROLES);
 export type Role = S.To<typeof Role>;
@@ -18,13 +18,13 @@ export type UserId = S.To<typeof UserId>;
 export const User = S.struct({
   id: UserId,
   email: S.string,
-  role: Role
+  role: Role,
 });
 export type User = S.To<typeof User>;
 export const FiefUserFields = S.struct({
-  role: Role
+  role: Role,
 });
 export const FiefUser = S.struct({
   sub: UserId,
-  fields: FiefUserFields
+  fields: FiefUserFields,
 });

@@ -21,7 +21,12 @@ server.on('error', console.error);
 
 const fiefAuthMiddleware = makeAuthMiddleware(app, port);
 
-app.get('/stonks', fiefAuthMiddleware(), useCanRole([ROLE_ACCOUNTANT, ROLE_ADMIN]), async (req, res) => {
-  const stonks = getTotalStonksForDate(new Date());
-  res.send({ stonks });
-});
+app.get(
+  '/stonks',
+  fiefAuthMiddleware(),
+  useCanRole([ROLE_ACCOUNTANT, ROLE_ADMIN]),
+  async (req, res) => {
+    const stonks = getTotalStonksForDate(new Date());
+    res.send({ stonks });
+  }
+);

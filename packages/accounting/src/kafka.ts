@@ -14,14 +14,20 @@ export const consumer = kafka.consumer({ groupId: 'accounting' });
 export const producer = kafka.producer();
 
 // TODO probably no outbox here, we don't really care about this so much
-export const reportAccountsAggregate = (userId: UserId, booksAggregates: {
-  current: BooksAggregate,
-  previous: BooksAggregate
-}, timestamp: Date) => {
+export const reportAccountsAggregate = (
+  userId: UserId,
+  booksAggregates: {
+    current: BooksAggregate;
+    previous: BooksAggregate;
+  },
+  timestamp: Date
+) => {
   const { current, previous } = booksAggregates;
   const STONKS_KEY = BOOK_USER_STONKS;
-  const currentBalance = current[STONKS_KEY].increase - current[STONKS_KEY].decrease;
-  const previousBalance = previous[STONKS_KEY].increase - previous[STONKS_KEY].decrease;
+  const currentBalance =
+    current[STONKS_KEY].increase - current[STONKS_KEY].decrease;
+  const previousBalance =
+    previous[STONKS_KEY].increase - previous[STONKS_KEY].decrease;
   const event: UserAccountsCUD = {
     type: 'UserAccountsCUD' as const,
     version: 1,
@@ -32,14 +38,14 @@ export const reportAccountsAggregate = (userId: UserId, booksAggregates: {
     },
     previous: {
       balance: Number(previousBalance),
-    }
+    },
   };
   return producer.send({
     topic: ACCOUNTING_TOPIC_NAME,
     messages: [
       {
         value: JSON.stringify(event),
-      }
-    ]
-  })
-}
+      },
+    ],
+  });
+};

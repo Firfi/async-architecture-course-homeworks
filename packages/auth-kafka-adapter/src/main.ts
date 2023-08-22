@@ -4,10 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 import * as S from '@effect/schema/Schema';
 import { Kafka } from 'kafkajs';
 import { Request } from 'express-serve-static-core';
-import {
-  USER_TOPIC_NAME,
-
-} from '@monorepo/kafka-users-common';
+import { USER_TOPIC_NAME } from '@monorepo/kafka-users-common';
 import { KAFKA_BROKERS_ENV } from '@monorepo/kafka-users-common';
 import { FiefUserFields, Role, User, UserId } from '@monorepo/utils';
 

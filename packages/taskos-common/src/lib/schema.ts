@@ -1,5 +1,9 @@
 import * as S from '@effect/schema/Schema';
-import { MonetaryAmount, MonetaryAmountPositive, UserId } from '@monorepo/utils';
+import {
+  MonetaryAmount,
+  MonetaryAmountPositive,
+  UserId,
+} from '@monorepo/utils';
 
 const TaskIdBrand = Symbol.for('TaskId');
 export const TaskId = S.UUID.pipe(S.brand(TaskIdBrand));
@@ -58,14 +62,24 @@ export const TaskEventCreateV2 = TaskEventCommons.pipe(
       title: S.string.pipe(S.pattern(/^[^\[\]]+$/)),
       description: S.string,
       jiraId: JiraId,
-
     })
   )
 );
-export const TaskEventCreate =
-  S.union(TaskEventCreateV1.pipe(S.attachPropertySignature("version", 1)), TaskEventCreateV2.pipe(S.attachPropertySignature("version", TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE]))).pipe(S.extend(S.struct({
-    type: S.literal(TASK_EVENT_CREATE),
-  })));
+export const TaskEventCreate = S.union(
+  TaskEventCreateV1.pipe(S.attachPropertySignature('version', 1)),
+  TaskEventCreateV2.pipe(
+    S.attachPropertySignature(
+      'version',
+      TASK_EVENT_CURRENT_VERSIONS[TASK_EVENT_CREATE]
+    )
+  )
+).pipe(
+  S.extend(
+    S.struct({
+      type: S.literal(TASK_EVENT_CREATE),
+    })
+  )
+);
 export type TaskEventCreate = S.To<typeof TaskEventCreate>;
 
 export const TaskEventAssignV1 = TaskEventCommons.pipe(
@@ -77,7 +91,9 @@ export const TaskEventAssignV1 = TaskEventCommons.pipe(
     })
   )
 );
-export const TaskEventAssign = TaskEventAssignV1.pipe(S.attachPropertySignature("version", CURRENT_TASK_EVENT_ASSIGN_VERSION)) // S.union(TaskEventAssignV1);
+export const TaskEventAssign = TaskEventAssignV1.pipe(
+  S.attachPropertySignature('version', CURRENT_TASK_EVENT_ASSIGN_VERSION)
+); // S.union(TaskEventAssignV1);
 export type TaskEventAssign = S.To<typeof TaskEventAssign>;
 export const TaskEventCompleteV1 = TaskEventCommons.pipe(
   S.extend(
@@ -88,7 +104,9 @@ export const TaskEventCompleteV1 = TaskEventCommons.pipe(
     })
   )
 );
-export const TaskEventComplete = TaskEventCompleteV1.pipe(S.attachPropertySignature("version", CURRENT_TASK_EVENT_COMPLETE_VERSION,)) // S.union(TaskEventCompleteV1);
+export const TaskEventComplete = TaskEventCompleteV1.pipe(
+  S.attachPropertySignature('version', CURRENT_TASK_EVENT_COMPLETE_VERSION)
+); // S.union(TaskEventCompleteV1);
 export type TaskEventComplete = S.To<typeof TaskEventComplete>;
 export const TaskEvent = S.union(
   TaskEventAssign,
@@ -110,12 +128,16 @@ export const UserAccountsStateCUDV1 = S.struct({
   balance: MonetaryAmount,
 });
 
-export const UserAccountsCUDV1 = UserAccountsCUDCommons.pipe(S.extend(
-  S.struct({
-    previous: UserAccountsStateCUDV1,
-    current: UserAccountsStateCUDV1
-  })
-));
+export const UserAccountsCUDV1 = UserAccountsCUDCommons.pipe(
+  S.extend(
+    S.struct({
+      previous: UserAccountsStateCUDV1,
+      current: UserAccountsStateCUDV1,
+    })
+  )
+);
 
-export const UserAccountsCUD = S.union(UserAccountsCUDV1).pipe(S.attachPropertySignature("version", 1));
+export const UserAccountsCUD = S.union(UserAccountsCUDV1).pipe(
+  S.attachPropertySignature('version', 1)
+);
 export type UserAccountsCUD = S.To<typeof UserAccountsCUD>;

@@ -17,13 +17,13 @@ const constNullStats = Object.freeze({
 
 const statsDb: Map<bigint, typeof constNullStats> = new Map();
 
-const max = (...args: bigint[]) => args.reduce((m, e) => e > m ? e : m);
+const max = (...args: bigint[]) => args.reduce((m, e) => (e > m ? e : m));
 
 export const onPrice = (price: bigint, timestamp: Date) => {
   const key = getDayIntFrom1970(timestamp);
   const current = priceDb.get(key) ?? BigInt(0);
   priceDb.set(key, max(current, price));
-}
+};
 
 export const getMaxPriceForInterval = (dayFrom: Date, dayTo: Date): bigint => {
   const fromKey = getDayIntFrom1970(dayFrom);
@@ -34,22 +34,30 @@ export const getMaxPriceForInterval = (dayFrom: Date, dayTo: Date): bigint => {
     maxPrice = max(maxPrice, price);
   }
   return maxPrice;
-}
+};
 
 // "Нужно указывать, сколько заработал топ-менеджмент за сегодня и сколько попугов ушло в минус."
-export const onUserBalance = (userId: UserId, balance: bigint, previousBalance: bigint, timestamp: Date) => {
+export const onUserBalance = (
+  userId: UserId,
+  balance: bigint,
+  previousBalance: bigint,
+  timestamp: Date
+) => {
   const todayDbKey = getDayIntFrom1970(timestamp);
   // TODO: "how much the company earned" definition is not clear; there is no money income into the system except for magic.
   // it could be that we listen for 1) user balance change 2) non-existing "income"; for now we assume income to be user balance change; although it's not correct entirely
   const todayStats = statsDb.get(todayDbKey) ?? constNullStats;
   const balanceDelta = balance - previousBalance;
   const topRevenue = todayStats.topRevenue - balanceDelta;
-  const losers = balanceDelta >= BigInt(0) ? todayStats.losers : [...new Set([...todayStats.losers, userId])];
+  const losers =
+    balanceDelta >= BigInt(0)
+      ? todayStats.losers
+      : [...new Set([...todayStats.losers, userId])];
   statsDb.set(todayDbKey, {
     topRevenue,
     losers,
   });
-}
+};
 
 export const getTopRevenueToday = (): bigint => {
   const todayDbKey = getDayIntFrom1970(new Date());
@@ -61,4 +69,4 @@ export const loserCountToday = (): number => {
   const todayDbKey = getDayIntFrom1970(new Date());
   const todayStats = statsDb.get(todayDbKey) ?? constNullStats;
   return todayStats.losers.length;
-}
+};

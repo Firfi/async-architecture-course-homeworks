@@ -9,7 +9,7 @@ services:
       - "3001:3001"
     environment:
       PORT: 3001
-      KAFKA_BROKERS: localhost:9094
+      KAFKA_BROKERS: kafka:9092
       OAUTH_BASE_URL: http://localhost:8000
     depends_on:
       - kafka
@@ -21,6 +21,8 @@ services:
       - "3002:3002"
     environment:
       PORT: 3002
+      KAFKA_BROKERS: kafka:9092
+      OAUTH_BASE_URL: http://localhost:8000
     depends_on:
       - kafka
   analytics:
@@ -31,6 +33,8 @@ services:
       - "3003:3003"
     environment:
       PORT: 3003
+      KAFKA_BROKERS: kafka:9092
+      OAUTH_BASE_URL: http://localhost:8000
     depends_on:
       - kafka
   auth-kafka-adapter:

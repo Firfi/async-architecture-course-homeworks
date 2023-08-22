@@ -117,5 +117,5 @@ export const UserAccountsCUDV1 = UserAccountsCUDCommons.pipe(S.extend(
   })
 ));
 
-export const UserAccountsCUD = S.union(UserAccountsCUDV1);
+export const UserAccountsCUD = S.union(UserAccountsCUDV1).pipe(S.attachPropertySignature("version", 1));
 export type UserAccountsCUD = S.To<typeof UserAccountsCUD>;

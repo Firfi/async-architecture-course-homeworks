@@ -3,8 +3,8 @@ import { uniformIntDistribution, xoroshiro128plus } from 'pure-rand';
 import { pipe } from 'fp-ts/function';
 import { users } from '../../user/db';
 import * as A from 'fp-ts/Array';
-import { ROLE_WORKER } from '@monorepo/kafka-users-common';
 import { none, some } from 'fp-ts/Option';
+import { ROLE_WORKER } from '@monorepo/utils';
 
 let rand = xoroshiro128plus(69);
 

@@ -3,26 +3,39 @@ import { Request, Response } from 'express-serve-static-core';
 import * as O from 'fp-ts/Option';
 import { isSome } from 'fp-ts/Option';
 import * as S from '@effect/schema/Schema';
-import { assertExists } from '@monorepo/utils';
-import { apply, flow, pipe } from 'fp-ts/function';
-import { Kafka } from 'kafkajs';
 import {
+  assertExists,
   FiefUser,
-  KAFKA_BROKERS_ENV,
   Role,
   ROLE_ADMIN,
   ROLE_MANAGER,
   ROLE_WORKER,
   User,
+  UserId,
+} from '@monorepo/utils';
+import { apply, flow, pipe } from 'fp-ts/function';
+import { Kafka } from 'kafkajs';
+import {
+  KAFKA_BROKERS_ENV,
   USER_TOPIC_NAME,
-  UserId
 } from '@monorepo/kafka-users-common';
 import { users } from './user/db';
-import { listen as listenReassign, reassign as reassign_ } from './task/reassigner';
+import {
+  listen as listenReassign,
+  reassign as reassign_,
+} from './task/reassigner';
 import { get as getTask, listAssigned, set as setTask } from './task/db';
-import { makeReportReassign, REASSIGN_TOPIC_NAME } from './task/reassigner/kafka';
+import {
+  makeReportReassign,
+  REASSIGN_TOPIC_NAME,
+} from './task/reassigner/kafka';
 import { isLeft } from 'fp-ts/Either';
-import { assign as assign_, complete as complete_, create as create_, ReportTaskEvent } from './task/fsm';
+import {
+  assign as assign_,
+  complete as complete_,
+  create as create_,
+  ReportTaskEvent,
+} from './task/fsm';
 import { report as report_ } from './task/topic';
 import bodyParser from 'body-parser';
 import { shuffleStrategy } from './task/reassigner/strategy';
@@ -33,8 +46,8 @@ import {
   TASK_EVENT_COMPLETE,
   TASK_EVENT_CREATE,
   TaskEvent,
-  TaskId
-} from '@monorepo/inventory-common/schema';
+  TaskId,
+} from '@monorepo/taskos-common/schema';
 import { TASK_EVENTS_TOPIC_NAME } from '../../kafka-users-common/src/lib/topics';
 import { makeAuthMiddleware, useCanRole } from '../../utils/src/lib/auth';
 
@@ -70,7 +83,7 @@ export const Shuffler = S.literal(...SHUFFLERS);
 export type Shuffler = S.To<typeof Shuffler>;
 
 const kafka = new Kafka({
-  clientId: 'inventory',
+  clientId: 'taskos',
   brokers: [...KAFKA_BROKERS_ENV],
 });
 
@@ -86,18 +99,22 @@ const reassign = pipe(
 );
 
 // reassign
-app.post('/shuffle', fiefAuthMiddleware(), useCanRole(SHUFFLERS), async (req, res) => {
-
-  const r = await reassign();
-  if (isLeft(r)) {
-    console.error('error reassigning', r.left);
-    res.status(500).send('Internal Server Error');
-    return;
-  } else {
-    res.status(200).send('OK');
-    return;
+app.post(
+  '/shuffle',
+  fiefAuthMiddleware(),
+  useCanRole(SHUFFLERS),
+  async (req, res) => {
+    const r = await reassign();
+    if (isLeft(r)) {
+      console.error('error reassigning', r.left);
+      res.status(500).send('Internal Server Error');
+      return;
+    } else {
+      res.status(200).send('OK');
+      return;
+    }
   }
-});
+);
 
 const deps = {
   get: getTask,
@@ -113,53 +130,73 @@ const CreateBody = S.struct({
   description: S.string.pipe(S.nonEmpty()),
 });
 
-app.post('/create', fiefAuthMiddleware(), useCanRole(['any']), async (req, res) => {
-  const body = S.parseSync(CreateBody)(req.body);
-  const r = await create(body.title, body.jiraId, body.description)();
-  if (isLeft(r)) {
-    console.error('error creating', r.left);
-    res.status(500).send('Internal Server Error');
-    return;
-  } else {
-    res.status(200).send('OK');
-    return;
+app.post(
+  '/create',
+  fiefAuthMiddleware(),
+  useCanRole(['any']),
+  async (req, res) => {
+    const body = S.parseSync(CreateBody)(req.body);
+    const r = await create(body.title, body.jiraId, body.description)();
+    if (isLeft(r)) {
+      console.error('error creating', r.left);
+      res.status(500).send('Internal Server Error');
+      return;
+    } else {
+      res.status(200).send('OK');
+      return;
+    }
   }
-});
+);
 
 const assign = flow(assign_, apply(deps));
 
-app.post('/assign/:id', fiefAuthMiddleware(), useCanRole(SHUFFLERS), async (req, res) => {
-  const id = S.parseSync(TaskId)(req.params.id);
-  const [assignee, finalize] = shuffleStrategy();
-  const r = await assign(id, assignee.id)();
-  if (isLeft(r)) {
-    console.error('error assigning', r.left);
-    res.status(500).send('Internal Server Error');
-    return;
-  } else {
-    finalize();
-    res.status(200).send('OK');
-    return;
+app.post(
+  '/assign/:id',
+  fiefAuthMiddleware(),
+  useCanRole(SHUFFLERS),
+  async (req, res) => {
+    const id = S.parseSync(TaskId)(req.params.id);
+    const [assignee, finalize] = shuffleStrategy();
+    const r = await assign(id, assignee.id)();
+    if (isLeft(r)) {
+      console.error('error assigning', r.left);
+      res.status(500).send('Internal Server Error');
+      return;
+    } else {
+      finalize();
+      res.status(200).send('OK');
+      return;
+    }
   }
-});
+);
 
 const complete = flow(complete_, apply(deps));
 
-app.post('/complete/:id', fiefAuthMiddleware(), useCanRole([ROLE_WORKER]), async (req, res) => {
-  const id = pipe(req.user, assertExists, S.parseSync(FiefUser), (u) => u.sub);
-  const taskId = S.parseSync(TaskId)(req.params.id);
-  const r = await complete(id, taskId)();
-  if (isLeft(r)) {
-    console.error('error completing', r.left);
-    res.status(500).send('Internal Server Error');
-    return;
-  } else {
-    res.status(200).send('OK');
-    return;
+app.post(
+  '/complete/:id',
+  fiefAuthMiddleware(),
+  useCanRole([ROLE_WORKER]),
+  async (req, res) => {
+    const id = pipe(
+      req.user,
+      assertExists,
+      S.parseSync(FiefUser),
+      (u) => u.sub
+    );
+    const taskId = S.parseSync(TaskId)(req.params.id);
+    const r = await complete(id, taskId)();
+    if (isLeft(r)) {
+      console.error('error completing', r.left);
+      res.status(500).send('Internal Server Error');
+      return;
+    } else {
+      res.status(200).send('OK');
+      return;
+    }
   }
-});
+);
 
-const consumer = kafka.consumer({ groupId: 'inventory' });
+const consumer = kafka.consumer({ groupId: 'taskos' });
 
 app.listen(port, host, async () => {
   console.log(`[ ready ] http://${host}:${port}`);

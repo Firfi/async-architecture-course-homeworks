@@ -1,10 +1,10 @@
 import { getOutstandingPayouts, payout } from '../db';
 import { constVoid, flow, pipe } from 'fp-ts/function';
 import * as A from 'fp-ts/Array';
-import { UserId } from '@monorepo/kafka-users-common';
 import { producer } from '../kafka';
 import * as TE from 'fp-ts/TaskEither';
 import { TaskEither } from 'fp-ts/TaskEither';
+import { UserId } from '@monorepo/utils';
 
 // simulate "cron" with derp day counter
 const MS_IN_DAY = 1000 * 60 * 60 * 24;
@@ -12,21 +12,20 @@ const MS_IN_DAY = 1000 * 60 * 60 * 24;
 // TODO pull by notification task etc
 const payoutNotifyQueue: [UserId, bigint][] = [];
 
-const notify = (
-  userId: UserId,
-  amount: bigint
-) => (tx: 'transaction todo'): TaskEither<'reportError', void> => {
-  // pretend we have transactional outbox here;
-  return TE.tryCatch(
-    async () => {
-      payoutNotifyQueue.push([userId, amount]);
-    },
-    (e) => {
-      console.error('report error', e);
-      return 'reportError';
-    }
-  );
-};
+const notify =
+  (userId: UserId, amount: bigint) =>
+  (tx: 'transaction todo'): TaskEither<'reportError', void> => {
+    // pretend we have transactional outbox here;
+    return TE.tryCatch(
+      async () => {
+        payoutNotifyQueue.push([userId, amount]);
+      },
+      (e) => {
+        console.error('report error', e);
+        return 'reportError';
+      }
+    );
+  };
 
 // TODO "running" state, idempotency key and all that
 const run_ = flow(

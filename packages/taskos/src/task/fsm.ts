@@ -1,5 +1,4 @@
 import * as S from '@effect/schema/Schema';
-import { UserId } from '@monorepo/kafka-users-common';
 import { match } from 'ts-pattern';
 import * as O from 'fp-ts/Option';
 import * as TE from 'fp-ts/TaskEither';
@@ -34,7 +33,7 @@ import { some } from 'fp-ts/Option';
 import { apply } from 'fp-ts/function';
 import { ReaderTaskEither } from 'fp-ts/ReaderTaskEither';
 import { TaskReportError } from './topic';
-import { uuidToNumberUnsafe } from '@monorepo/utils';
+import { UserId, uuidToNumberUnsafe } from '@monorepo/utils';
 import { RandomGenerator } from 'pure-rand/lib/types/generator/RandomGenerator';
 import { State } from 'fp-ts/State';
 import * as ST from 'fp-ts/State';
@@ -50,7 +49,7 @@ import {
   TaskEventComplete,
   TaskEventCreate,
   TaskId,
-} from '@monorepo/inventory-common/schema';
+} from '@monorepo/taskos-common/schema';
 
 export type AlreadyExistsError = 'AlreadyExistsError';
 export type WriteNewError = DbWriteError | AlreadyExistsError | TaskDbReadError;

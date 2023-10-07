@@ -1,18 +1,23 @@
 import { FiefUserInfo } from '@fief/fief/src/client';
-import { assertExists, assertNonEmptyAndAssigned } from '@monorepo/utils';
+import {
+  assertExists,
+  assertNonEmptyAndAssigned,
+  FiefUser,
+  Role,
+} from '@monorepo/utils';
 import * as fief from '@fief/fief';
 import { Request, Response } from 'express-serve-static-core';
 import * as fiefExpress from '@fief/fief/express';
 import * as S from '@effect/schema/Schema';
 import { Express, NextFunction } from 'express';
 import { ReadonlyNonEmptyArray } from 'fp-ts/ReadonlyNonEmptyArray';
-import { FiefUser, Role } from '@monorepo/kafka-users-common';
 import { pipe } from 'fp-ts/function';
 import * as O from 'fp-ts/Option';
 import { isSome } from 'fp-ts/Option';
 
 const SESSION_COOKIE_NAME = 'user_session';
-const REDIRECT_URI = (localPort: number) => `http://localhost:${localPort}/auth-callback`;
+const REDIRECT_URI = (localPort: number) =>
+  `http://localhost:${localPort}/auth-callback`;
 
 class MemoryUserInfoCache<Id extends string, T> {
   storage: Record<Id, T>;
@@ -55,32 +60,37 @@ const fiefClient = new fief.Fief({
   clientSecret: 'dp6H8D1gPmdEA4gxd7izO0KDAp9JAbgQswxwTdGQrQo',
 });
 
-const unauthorizedResponse = (redirectUri: string) => async (req: Request, res: Response) => {
-  const authURL = await fiefClient.getAuthURL({
-    redirectURI: redirectUri,
-    scope: ['openid'],
-  });
-  res.redirect(307, authURL);
-};
+const unauthorizedResponse =
+  (redirectUri: string) => async (req: Request, res: Response) => {
+    const authURL = await fiefClient.getAuthURL({
+      redirectURI: redirectUri,
+      scope: ['openid'],
+    });
+    res.redirect(307, authURL);
+  };
 
-export const useCanRole = (roles: ReadonlyNonEmptyArray<Role | 'any'>) => (req: Request, res: Response, next: NextFunction) => {
-  const can = pipe(
-    req.user,
-    assertExists,
-    S.parseSync(FiefUser),
-    (u) => u.fields.role,
-    S.parseOption(Role),
-    O.chain(O.fromPredicate((r) => roles.includes(r) || roles.includes('any'))),
-    isSome
-  );
-  if (!can) {
-    res.status(403).send('Forbidden');
-    next('Forbidden');
-    return;
-  } else {
-    next();
-  }
-};
+export const useCanRole =
+  (roles: ReadonlyNonEmptyArray<Role | 'any'>) =>
+  (req: Request, res: Response, next: NextFunction) => {
+    const can = pipe(
+      req.user,
+      assertExists,
+      S.parseSync(FiefUser),
+      (u) => u.fields.role,
+      S.parseOption(Role),
+      O.chain(
+        O.fromPredicate((r) => roles.includes(r) || roles.includes('any'))
+      ),
+      isSome
+    );
+    if (!can) {
+      res.status(403).send('Forbidden');
+      next('Forbidden');
+      return;
+    } else {
+      next();
+    }
+  };
 
 export const makeAuthMiddleware = (app: Express, localPort: number) => {
   const redirectUri = REDIRECT_URI(localPort);
@@ -102,7 +112,7 @@ export const makeAuthMiddleware = (app: Express, localPort: number) => {
     client: fiefClient,
     tokenGetter: fiefExpress.cookieGetter(SESSION_COOKIE_NAME),
     unauthorizedResponse: unauthorizedResponse(redirectUri),
-    userInfoCache
+    userInfoCache,
   });
 };
 

@@ -17,10 +17,10 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@monorepo/inventory-common/*": ["packages/inventory-common/src/lib/*"],
       "@monorepo/kafka-users-common": [
         "packages/kafka-users-common/src/index.ts"
       ],
+      "@monorepo/taskos-common/*": ["packages/taskos-common/src/lib/*"],
       "@monorepo/utils": ["packages/utils/src/index.ts"]
     }
   },

@@ -1,1 +1,12 @@
 export * from './lib/utils';
+export { FiefUser } from './lib/types';
+export { FiefUserFields } from './lib/types';
+export { User } from './lib/types';
+export { UserId } from './lib/types';
+export { UserIdBrand } from './lib/types';
+export { Role } from './lib/types';
+export { ROLES } from './lib/types';
+export { ROLE_ACCOUNTANT } from './lib/types';
+export { ROLE_MANAGER } from './lib/types';
+export { ROLE_ADMIN } from './lib/types';
+export { ROLE_WORKER } from './lib/types';

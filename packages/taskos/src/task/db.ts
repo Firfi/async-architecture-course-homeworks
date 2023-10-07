@@ -6,7 +6,7 @@ import { Option } from 'fp-ts/Option';
 import * as O from 'fp-ts/Option';
 import * as A from 'fp-ts/Array';
 import { flow } from 'fp-ts/function';
-import { TaskId } from '@monorepo/inventory-common/schema';
+import { TaskId } from '@monorepo/taskos-common/schema';
 
 export type DbReadError = 'DbReadError';
 export type DbWriteError = 'DbWriteError';

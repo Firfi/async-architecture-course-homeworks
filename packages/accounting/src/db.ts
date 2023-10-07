@@ -1,7 +1,7 @@
-import { UserId } from '@monorepo/kafka-users-common';
-import { TaskId } from '@monorepo/inventory-common/schema';
+import { TaskId } from '@monorepo/taskos-common/schema';
 import { pipe } from 'fp-ts/function';
 import * as A from 'fp-ts/Array';
+import { UserId } from '@monorepo/utils';
 
 const BOOK_MAGIC_REVENUE = 'magicRevenue' as const;
 export const BOOK_COMPANY_STONKS = 'companyStonks' as const;
@@ -160,74 +160,79 @@ const reflectEntry = (books: Shelf['books'], entry: MovementEntry) => ({
   },
 });
 
-export const penalty = (userId: UserId, taskId: TaskId, amount: bigint) => (tx: 'transaction todo') => {
-  const shelf = db.get(userId) ?? emptyShelf();
-  const debCred = {
-    [DEBIT]: BOOK_USER_STONKS,
-    [CREDIT]: BOOK_COMPANY_STONKS,
-  };
-  // book -> increase/decrease
+export const penalty =
+  (userId: UserId, taskId: TaskId, amount: bigint) =>
+  (tx: 'transaction todo') => {
+    const shelf = db.get(userId) ?? emptyShelf();
+    const debCred = {
+      [DEBIT]: BOOK_USER_STONKS,
+      [CREDIT]: BOOK_COMPANY_STONKS,
+    };
+    // book -> increase/decrease
 
-  const entry: TaskAssignedPenaltyMovementEntry = {
-    ...debCred,
-    amount,
-    date: new Date(),
-    metadata: {
-      taskId,
-    },
+    const entry: TaskAssignedPenaltyMovementEntry = {
+      ...debCred,
+      amount,
+      date: new Date(),
+      metadata: {
+        taskId,
+      },
+    };
+    const aggregate = reflectEntry(shelf.books, entry);
+    db.set(userId, {
+      entries: [...shelf.entries, entry],
+      books: aggregate,
+    });
+    return {
+      current: aggregate,
+      previous: shelf.books,
+    };
   };
-  const aggregate = reflectEntry(shelf.books, entry);
-  db.set(userId, {
-    entries: [...shelf.entries, entry],
-    books: aggregate,
-  });
-  return {
-    current: aggregate,
-    previous: shelf.books
-  };
-};
 
-export const reward = (userId: UserId, taskId: TaskId, amount: bigint) => (tx: 'transaction todo') => {
-  const shelf = db.get(userId) ?? emptyShelf();
-  const entry: TaskCompleteRewardMovementEntry = {
-    [DEBIT]: BOOK_COMPANY_STONKS,
-    [CREDIT]: BOOK_USER_STONKS,
-    amount,
-    date: new Date(),
-    metadata: {
-      taskId,
-    },
+export const reward =
+  (userId: UserId, taskId: TaskId, amount: bigint) =>
+  (tx: 'transaction todo') => {
+    const shelf = db.get(userId) ?? emptyShelf();
+    const entry: TaskCompleteRewardMovementEntry = {
+      [DEBIT]: BOOK_COMPANY_STONKS,
+      [CREDIT]: BOOK_USER_STONKS,
+      amount,
+      date: new Date(),
+      metadata: {
+        taskId,
+      },
+    };
+    const aggregate = reflectEntry(shelf.books, entry);
+    db.set(userId, {
+      entries: [...shelf.entries, entry],
+      books: aggregate,
+    });
+    return {
+      current: aggregate,
+      previous: shelf.books,
+    };
   };
-  const aggregate = reflectEntry(shelf.books, entry);
-  db.set(userId, {
-    entries: [...shelf.entries, entry],
-    books: aggregate,
-  });
-  return {
-    current: aggregate,
-    previous: shelf.books
-  };
-};
 
-export const payout = (userId: UserId, amount: bigint) => (tx: 'transaction todo') => {
-  const shelf = db.get(userId) ?? emptyShelf();
-  const entry: PayoutMovementEntry = {
-    [DEBIT]: BOOK_USER_STONKS,
-    [CREDIT]: BOOK_MAGIC_REVENUE,
-    amount,
-    date: new Date(),
-    metadata: {},
+export const payout =
+  (userId: UserId, amount: bigint) => (tx: 'transaction todo') => {
+    const shelf = db.get(userId) ?? emptyShelf();
+    const entry: PayoutMovementEntry = {
+      [DEBIT]: BOOK_USER_STONKS,
+      [CREDIT]: BOOK_MAGIC_REVENUE,
+      amount,
+      date: new Date(),
+      metadata: {},
+    };
+    const aggregate = reflectEntry(shelf.books, entry);
+    db.set(userId, {
+      entries: [...shelf.entries, entry],
+      books: aggregate,
+    });
+    return {
+      current: aggregate,
+      previous: shelf.books,
+    };
   };
-  const aggregate = reflectEntry(shelf.books, entry);
-  db.set(userId, {
-    entries: [...shelf.entries, entry],
-    books: aggregate,
-  });
-  return {
-    current: aggregate,
-    previous: shelf.books
-  };
-};
 
 // TODO non-negative in types...
 // TODO prepareOutstandingPayout actually; we don't want no double calls
@@ -239,13 +244,15 @@ export const getOutstandingPayout = (userId: UserId): bigint =>
     (x) => (x < BigInt(0) ? BigInt(0) : x)
   );
 
-export const getOutstandingPayouts = () => (tx: 'transaction todo'): Record<UserId, bigint> =>
-  pipe(
-    [...db.keys()],
-    A.map((userId) => [userId, getOutstandingPayout(userId)] as const),
-    A.filter(([_, amount]) => amount > BigInt(0)),
-    A.reduce({}, (acc, [userId, amount]) => ({ ...acc, [userId]: amount }))
-  );
+export const getOutstandingPayouts =
+  () =>
+  (tx: 'transaction todo'): Record<UserId, bigint> =>
+    pipe(
+      [...db.keys()],
+      A.map((userId) => [userId, getOutstandingPayout(userId)] as const),
+      A.filter(([_, amount]) => amount > BigInt(0)),
+      A.reduce({}, (acc, [userId, amount]) => ({ ...acc, [userId]: amount }))
+    );
 
 const getStartOfTheDay = (date: Date) => {
   // TODO TIMEZONE :derp:
